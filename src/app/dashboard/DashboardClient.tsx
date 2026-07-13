@@ -46,30 +46,30 @@ export default function DashboardClient(p: Props) {
       </div>
 
       {p.isTrialing && (
-        <div style={s.trial}>
+        <div style={s.trial} className={p.daysLeft <= 3 ? 'animate-pulse-soft' : ''}>
           <span style={s.trialTxt}>
             {p.daysLeft > 0 ? `⏳ Trial: ${p.daysLeft} day${p.daysLeft !== 1 ? 's' : ''} remaining` : '⚠️ Trial expired'}
           </span>
-          <button onClick={() => router.push('/dashboard/settings#billing')} style={{ background: '#4f46e5', color: '#fff', fontWeight: 600, borderRadius: 6, padding: '6px 14px', fontSize: 13 }}>
+          <button onClick={() => router.push('/dashboard/settings#billing')} className="hover-lift" style={{ background: '#4f46e5', color: '#fff', fontWeight: 600, borderRadius: 6, padding: '6px 14px', fontSize: 13 }}>
             Upgrade →
           </button>
         </div>
       )}
 
       <div style={s.statsRow}>
-        <div style={s.stat}>
+        <div style={{ ...s.stat, '--d': '0s' } as React.CSSProperties} className="animate-in card-hover">
           <div style={s.statN}>{p.propCount}</div>
           <div style={s.statL}>Propert{p.propCount === 1 ? 'y' : 'ies'}</div>
         </div>
-        <div style={s.stat}>
+        <div style={{ ...s.stat, '--d': '0.05s' } as React.CSSProperties} className="animate-in card-hover">
           <div style={s.statN}>{p.empCount}</div>
           <div style={s.statL}>Active employee{p.empCount === 1 ? '' : 's'}</div>
         </div>
-        <div style={{ ...s.stat, cursor: p.pendingOnboarding > 0 ? 'pointer' : 'default' }} onClick={() => p.pendingOnboarding > 0 && router.push('/onboarding')}>
+        <div style={{ ...s.stat, '--d': '0.1s', cursor: p.pendingOnboarding > 0 ? 'pointer' : 'default' } as React.CSSProperties} className="animate-in card-hover" onClick={() => p.pendingOnboarding > 0 && router.push('/onboarding')}>
           <div style={{ ...s.statN, color: p.pendingOnboarding > 0 ? '#c0392b' : '#1c1b22' }}>{p.pendingOnboarding}</div>
           <div style={s.statL}>Pending onboarding tasks</div>
         </div>
-        <div style={{ ...s.stat, cursor: 'pointer' }} onClick={() => router.push('/reports/hiring')}>
+        <div style={{ ...s.stat, '--d': '0.15s', cursor: 'pointer' } as React.CSSProperties} className="animate-in card-hover" onClick={() => router.push('/reports/hiring')}>
           <div style={{ ...s.statN, color: p.openPositions > 0 ? '#c0392b' : '#1c1b22' }}>{p.openPositions}</div>
           <div style={s.statL}>Open position{p.openPositions === 1 ? '' : 's'} to fill</div>
         </div>
@@ -98,7 +98,7 @@ export default function DashboardClient(p: Props) {
 
 function SetupCard({ done, icon, title, desc, cta, onClick }: { done: boolean; icon: string; title: string; desc: string; cta: string; onClick: () => void }) {
   return (
-    <div onClick={onClick} style={{ border: `1px solid ${done ? '#bbf7d0' : '#e9e4da'}`, background: done ? '#e8f3ec' : '#fff', borderRadius: 8, padding: '16px 18px', cursor: 'pointer' }}>
+    <div onClick={onClick} className="card-hover" style={{ border: `1px solid ${done ? '#bbf7d0' : '#e9e4da'}`, background: done ? '#e8f3ec' : '#fff', borderRadius: 8, padding: '16px 18px', cursor: 'pointer' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
         <span>{done ? '✅' : '⬜'}</span>{title}
       </div>
@@ -110,7 +110,7 @@ function SetupCard({ done, icon, title, desc, cta, onClick }: { done: boolean; i
 
 function QuickLink({ icon, label, sub, onClick, hot }: { icon: string; label: string; sub: string; href: string; onClick: () => void; hot?: boolean }) {
   return (
-    <div onClick={onClick} style={{ background: '#fff', border: `1px solid ${hot ? '#f0c8c2' : '#e9e4da'}`, borderRadius: 10, padding: '20px 24px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 16 }}>
+    <div onClick={onClick} className="card-hover" style={{ background: '#fff', border: `1px solid ${hot ? '#f0c8c2' : '#e9e4da'}`, borderRadius: 10, padding: '20px 24px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 16 }}>
       <span style={{ fontSize: 28 }}>{icon}</span>
       <div>
         <div style={{ fontWeight: 600, fontSize: 15, color: '#1c1b22' }}>{label}</div>

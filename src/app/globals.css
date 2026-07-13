@@ -54,10 +54,11 @@ button {
   border: none;
   border-radius: 8px;
   padding: 8px 16px;
-  transition: opacity 0.15s, background 0.15s, transform 0.15s;
+  transition: opacity 0.15s, background 0.15s, transform 0.15s, box-shadow 0.15s;
 }
-button:hover { opacity: 0.92; }
-button:disabled { opacity: 0.5; cursor: not-allowed; }
+button:hover { opacity: 0.92; transform: translateY(-1px); }
+button:active { transform: translateY(0) scale(0.98); }
+button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
 input, select, textarea {
   font-family: inherit;
@@ -67,11 +68,14 @@ input, select, textarea {
   padding: 8px 12px;
   width: 100%;
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
   background: #fff;
   color: var(--text);
 }
-input:focus, select:focus, textarea:focus { border-color: var(--blue); }
+input:focus, select:focus, textarea:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-lt);
+}
 
 label {
   display: block;
@@ -88,13 +92,22 @@ label {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 20px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 28px rgba(28, 27, 34, 0.08);
+  border-color: var(--border-md);
 }
 
 .btn-primary {
   background: var(--blue);
   color: #fff;
   font-weight: 600;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.25);
 }
+.btn-primary:hover { box-shadow: 0 6px 16px rgba(79, 70, 229, 0.35); }
 .btn-secondary {
   background: var(--surface);
   color: var(--text);
@@ -109,6 +122,73 @@ label {
   background: var(--brass);
   color: var(--ink);
   font-weight: 600;
+  box-shadow: 0 2px 8px rgba(181, 131, 46, 0.3);
+}
+.btn-brass:hover { box-shadow: 0 6px 16px rgba(181, 131, 46, 0.4); }
+
+/* ─── Motion system ──────────────────────────────────────────── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes shake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60% { transform: translateX(4px); }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes softPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+.page-transition { animation: fadeInUp 0.35s ease both; }
+
+.animate-in {
+  opacity: 0;
+  animation: fadeInUp 0.5s ease both;
+  animation-delay: var(--d, 0s);
+}
+.animate-in-scale {
+  opacity: 0;
+  animation: scaleIn 0.4s ease both;
+  animation-delay: var(--d, 0s);
+}
+.animate-shake { animation: shake 0.4s ease; }
+.animate-pulse-soft { animation: softPulse 2s ease-in-out infinite; }
+
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  vertical-align: -2px;
+  margin-right: 8px;
+}
+.spinner-dark {
+  border-color: rgba(28, 27, 34, 0.15);
+  border-top-color: var(--ink);
+}
+
+.hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
 }
 
 .badge {
