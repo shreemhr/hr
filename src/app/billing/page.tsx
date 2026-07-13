@@ -16,9 +16,17 @@ export default function BillingPage() {
   const [upgrading, setUpgrading] = useState<string | null>(null);
   const [porting,   setPorting]   = useState(false);
   const [error,     setError]     = useState('');
+  const [loadErrorMsg, setLoadErrorMsg] = useState('');
 
   useEffect(() => {
-    fetch('/api/billing/status').then(r => r.json()).then(d => { setStatus(d); setLoading(false); });
+    fetch('/api/billing/status')
+      .then(async r => {
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { setLoadErrorMsg(d.error ?? 'Unable to load billing info.'); return; }
+        setStatus(d);
+      })
+      .catch(() => setLoadErrorMsg('Unable to load billing info.'))
+      .finally(() => setLoading(false));
   }, []);
 
   async function startCheckout(plan: string) {
@@ -68,7 +76,7 @@ export default function BillingPage() {
   } as const;
 
   if (loading) return <div style={{ color: '#6b6760' }}>Loading…</div>;
-  if (!status) return <div style={{ color: '#c0392b' }}>Unable to load billing info.</div>;
+  if (loadErrorMsg || !status) return <div style={{ color: '#c0392b' }}>{loadErrorMsg || 'Unable to load billing info.'}</div>;
 
   const { company, usage, trial } = status;
   const currentPlan = company.plan as keyof typeof PLANS;

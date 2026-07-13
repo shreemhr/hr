@@ -21,11 +21,11 @@ export default function PortalDashboardPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/portal/me').then(r => r.json()),
-      fetch('/api/portal/onboarding').then(r => r.json()).catch(() => null),
-      fetch('/api/portal/offer-letter').then(r => r.json()).catch(() => null),
-      fetch('/api/portal/disciplinary').then(r => r.json()).catch(() => []),
-      fetch('/api/portal/reviews').then(r => r.json()).catch(() => []),
+      fetch('/api/portal/me').then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch('/api/portal/onboarding').then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch('/api/portal/offer-letter').then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch('/api/portal/disciplinary').then(r => r.ok ? r.json() : []).catch(() => []),
+      fetch('/api/portal/reviews').then(r => r.ok ? r.json() : []).catch(() => []),
     ]).then(([empData, obData, olData, discData, revData]) => {
       setEmp(empData);
       if (obData?.tasks) {

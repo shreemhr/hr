@@ -5,7 +5,7 @@ import { TRIAL_DAYS } from '@/lib/product';
 
 export async function POST(req: NextRequest) {
   try {
-    const { companyName, name, email, password } = await req.json();
+    const { companyName, legalName, name, email, password } = await req.json();
 
     if (!companyName || !name || !email || !password) {
       return NextResponse.json({ error: 'All fields required' }, { status: 400 });
@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
       .from('companies')
       .insert({
         name: companyName.trim(),
+        legal_name: legalName?.trim() || null,
         trial_ends_at: trialEnds.toISOString(),
         plan: 'trial',
       })

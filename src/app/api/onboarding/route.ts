@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   // Fetch employees scoped to this company (and property for non-admins)
   let empQuery = supabase
     .from('employees')
-    .select('id, first_name, last_name, property_id, hire_date, onboarding_status, properties(name, state)')
+    .select('id, first_name, last_name, property_id, hire_date, onboarding_status, properties(name, state), positions(title)')
     .eq('company_id', session.companyId);
 
   if (!isAdmin(session.role) && session.propertyIds?.length) {

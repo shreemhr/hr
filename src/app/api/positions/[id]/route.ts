@@ -37,9 +37,15 @@ export async function PATCH(
     patch.pay_band_mode = body.pay_band_mode;
   }
 
-  // Guard: min must not exceed max when both present
+  // Guard: band values must be non-negative, and min must not exceed max when both present
   const newMin = 'pay_band_min' in patch ? (patch.pay_band_min as number | null) : undefined;
   const newMax = 'pay_band_max' in patch ? (patch.pay_band_max as number | null) : undefined;
+  if (newMin != null && newMin < 0) {
+    return NextResponse.json({ error: 'Band minimum cannot be negative.' }, { status: 400 });
+  }
+  if (newMax != null && newMax < 0) {
+    return NextResponse.json({ error: 'Band maximum cannot be negative.' }, { status: 400 });
+  }
   if (newMin != null && newMax != null && newMin > newMax) {
     return NextResponse.json({ error: 'Band minimum cannot be greater than maximum.' }, { status: 400 });
   }

@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import Toast, { ToastState } from '@/components/Toast';
 
 // ── Types ──────────────────────────────────────────────────
 interface Employee {
@@ -78,6 +79,7 @@ export default function EmployeeProfilePage({ params }: { params: { id: string }
   const [reviews,    setReviews]    = useState<Review[]>([]);
   const [notes,      setNotes]      = useState<Note[]>([]);
   const [loading,    setLoading]    = useState(true);
+  const [toast,      setToast]      = useState<ToastState | null>(null);
 
   // UI state
   const [assignTplId, setAssignTplId] = useState('');
@@ -165,34 +167,53 @@ export default function EmployeeProfilePage({ params }: { params: { id: string }
 
   async function giveRecognition() {
     setRecoSaving(true);
-    const res = await fetch(`/api/employees/${id}/recognitions`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ category: recoCat, note: recoNote }),
-    });
-    setRecoSaving(false);
-    if (res.ok) { setRecoDone(true); setRecoNote(''); setTimeout(() => { setShowReco(false); setRecoDone(false); }, 1400); }
+    try {
+      const res = await fetch(`/api/employees/${id}/recognitions`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category: recoCat, note: recoNote }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setToast({ message: data.error ?? 'Failed to save recognition.', type: 'error' });
+        return;
+      }
+      setRecoDone(true); setRecoNote(''); setTimeout(() => { setShowReco(false); setRecoDone(false); }, 1400);
+    } catch {
+      setToast({ message: 'Network error — please try again.', type: 'error' });
+    } finally {
+      setRecoSaving(false);
+    }
   }
 
+  const [loadError, setLoadError] = useState(false);
+
   const load = useCallback(async () => {
-    const [er, or, cr, ir, tr, dr, rr, nr] = await Promise.all([
-      fetch(`/api/employees/${id}`).then(r => r.json()),
-      fetch(`/api/onboarding?employee_id=${id}`).then(r => r.json()).catch(() => null),
-      fetch(`/api/employees/${id}/checklists`).then(r => r.json()).catch(() => []),
-      fetch(`/api/employees/${id}/portal-invite`).then(r => r.json()).catch(() => null),
-      fetch('/api/checklists').then(r => r.json()).catch(() => []),
-      fetch(`/api/employees/${id}/disciplinary`).then(r => r.json()).catch(() => []),
-      fetch(`/api/employees/${id}/reviews`).then(r => r.json()).catch(() => []),
-      fetch(`/api/employees/${id}/notes`).then(r => r.json()).catch(() => []),
-    ]);
-    setEmp(er);
-    if (Array.isArray(or)) setTasks(or[0]?.tasks ?? []);
-    setChecklists(Array.isArray(cr) ? cr : []);
-    setInvite(ir?.invite ?? null);
-    setTemplates(Array.isArray(tr) ? tr.filter((t: { active: boolean }) => t.active) : []);
-    setDiscRecs(Array.isArray(dr) ? dr : []);
-    setReviews(Array.isArray(rr) ? rr : []);
-    setNotes(Array.isArray(nr) ? nr : []);
-    setLoading(false);
+    try {
+      const empRes = await fetch(`/api/employees/${id}`);
+      if (!empRes.ok) { setLoadError(true); setLoading(false); return; }
+      const [er, or, cr, ir, tr, dr, rr, nr] = await Promise.all([
+        empRes.json(),
+        fetch(`/api/onboarding?employee_id=${id}`).then(r => r.json()).catch(() => null),
+        fetch(`/api/employees/${id}/checklists`).then(r => r.json()).catch(() => []),
+        fetch(`/api/employees/${id}/portal-invite`).then(r => r.json()).catch(() => null),
+        fetch('/api/checklists').then(r => r.json()).catch(() => []),
+        fetch(`/api/employees/${id}/disciplinary`).then(r => r.json()).catch(() => []),
+        fetch(`/api/employees/${id}/reviews`).then(r => r.json()).catch(() => []),
+        fetch(`/api/employees/${id}/notes`).then(r => r.json()).catch(() => []),
+      ]);
+      setEmp(er);
+      if (Array.isArray(or)) setTasks(or[0]?.tasks ?? []);
+      setChecklists(Array.isArray(cr) ? cr : []);
+      setInvite(ir?.invite ?? null);
+      setTemplates(Array.isArray(tr) ? tr.filter((t: { active: boolean }) => t.active) : []);
+      setDiscRecs(Array.isArray(dr) ? dr : []);
+      setReviews(Array.isArray(rr) ? rr : []);
+      setNotes(Array.isArray(nr) ? nr : []);
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
@@ -200,75 +221,170 @@ export default function EmployeeProfilePage({ params }: { params: { id: string }
   // ── Actions ──
   async function startOnboarding() {
     setStarting(true);
-    await fetch('/api/onboarding', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: id }) });
-    await load(); setTab('onboarding'); setStarting(false);
+    try {
+      const res = await fetch('/api/onboarding', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: id }) });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setToast({ message: data.error ?? 'Failed to start onboarding.', type: 'error' });
+        return;
+      }
+      await load(); setTab('onboarding');
+    } catch {
+      setToast({ message: 'Network error — please try again.', type: 'error' });
+    } finally {
+      setStarting(false);
+    }
   }
 
   async function toggleChecklistItem(completionId: string, cur: string) {
-    await fetch(`/api/employees/${id}/checklists`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ completion_id: completionId, status: cur === 'complete' ? 'pending' : 'complete' }),
-    });
-    await load();
+    try {
+      const res = await fetch(`/api/employees/${id}/checklists`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ completion_id: completionId, status: cur === 'complete' ? 'pending' : 'complete' }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setToast({ message: data.error ?? 'Failed to update checklist item.', type: 'error' });
+        return;
+      }
+      await load();
+    } catch {
+      setToast({ message: 'Network error — please try again.', type: 'error' });
+    }
   }
 
   async function assignChecklist() {
     if (!assignTplId) return;
     setAssigning(true);
-    await fetch(`/api/checklists/${assignTplId}/assign`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: id }),
-    });
-    setAssignTplId(''); await load(); setAssigning(false);
+    try {
+      const res = await fetch(`/api/checklists/${assignTplId}/assign`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: id }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setToast({ message: data.error ?? 'Failed to assign checklist.', type: 'error' });
+        return;
+      }
+      setAssignTplId(''); await load();
+      setToast({ message: 'Checklist assigned.', type: 'success' });
+    } catch {
+      setToast({ message: 'Network error — please try again.', type: 'error' });
+    } finally {
+      setAssigning(false);
+    }
   }
 
   async function generateInvite() {
     setGenInvite(true);
-    const res = await fetch(`/api/employees/${id}/portal-invite`, { method: 'POST' });
-    const data = await res.json();
-    setNewInvite(data); await load(); setGenInvite(false);
+    try {
+      const res = await fetch(`/api/employees/${id}/portal-invite`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setToast({ message: data.error ?? 'Failed to generate invite.', type: 'error' });
+        return;
+      }
+      setNewInvite(data); await load();
+    } catch {
+      setToast({ message: 'Network error — please try again.', type: 'error' });
+    } finally {
+      setGenInvite(false);
+    }
   }
 
   async function saveDisc() {
     if (!dDate || !dDesc) return;
     setDSaving(true);
-    await fetch(`/api/employees/${id}/disciplinary`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: dType, issued_date: dDate, incident_date: dIncident || null, description: dDesc, action_taken: dAction || null, notify_email: dNotify || null }),
-    });
-    setDDesc(''); setDAction(''); setDIncident(''); setDNotify(''); setShowDiscForm(false);
-    await load(); setDSaving(false);
+    try {
+      const res = await fetch(`/api/employees/${id}/disciplinary`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: dType, issued_date: dDate, incident_date: dIncident || null, description: dDesc, action_taken: dAction || null, notify_email: dNotify || null }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setToast({ message: data.error ?? 'Failed to save disciplinary record.', type: 'error' });
+        return;
+      }
+      setDDesc(''); setDAction(''); setDIncident(''); setDNotify(''); setShowDiscForm(false);
+      await load();
+      setToast({ message: 'Disciplinary record saved.', type: 'success' });
+    } catch {
+      setToast({ message: 'Network error — please try again.', type: 'error' });
+    } finally {
+      setDSaving(false);
+    }
   }
 
   async function saveReview() {
     if (!rDate) return;
     setRSaving(true);
-    await fetch(`/api/employees/${id}/reviews`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ review_period: rPeriod || null, review_date: rDate, rating: rRating || null, overall_comments: rComments || null, goals_next_period: rGoals || null, status: 'completed' }),
-    });
-    setRPeriod(''); setRDate(''); setRRating(''); setRComments(''); setRGoals(''); setShowReviewForm(false);
-    await load(); setRSaving(false);
+    try {
+      const res = await fetch(`/api/employees/${id}/reviews`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ review_period: rPeriod || null, review_date: rDate, rating: rRating || null, overall_comments: rComments || null, goals_next_period: rGoals || null, status: 'completed' }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setToast({ message: data.error ?? 'Failed to save review.', type: 'error' });
+        return;
+      }
+      setRPeriod(''); setRDate(''); setRRating(''); setRComments(''); setRGoals(''); setShowReviewForm(false);
+      await load();
+      setToast({ message: 'Review saved.', type: 'success' });
+    } catch {
+      setToast({ message: 'Network error — please try again.', type: 'error' });
+    } finally {
+      setRSaving(false);
+    }
   }
 
   async function addNote() {
     if (!nContent.trim()) return;
     setNSaving(true);
-    await fetch(`/api/employees/${id}/notes`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: nType, content: nContent }),
-    });
-    setNContent(''); await load(); setNSaving(false);
+    try {
+      const res = await fetch(`/api/employees/${id}/notes`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: nType, content: nContent }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setToast({ message: data.error ?? 'Failed to add note.', type: 'error' });
+        return;
+      }
+      setNContent(''); await load();
+    } catch {
+      setToast({ message: 'Network error — please try again.', type: 'error' });
+    } finally {
+      setNSaving(false);
+    }
   }
 
   async function deleteNote(noteId: string) {
-    await fetch(`/api/employees/${id}/notes?note_id=${noteId}`, { method: 'DELETE' });
-    await load();
+    try {
+      const res = await fetch(`/api/employees/${id}/notes?note_id=${noteId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setToast({ message: data.error ?? 'Failed to delete note.', type: 'error' });
+        return;
+      }
+      await load();
+    } catch {
+      setToast({ message: 'Network error — please try again.', type: 'error' });
+    }
   }
 
   async function markDiscAcked(recordId: string) {
-    await fetch(`/api/employees/${id}/disciplinary/${recordId}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_acknowledged: true }),
-    });
-    await load();
+    try {
+      const res = await fetch(`/api/employees/${id}/disciplinary/${recordId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_acknowledged: true }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setToast({ message: data.error ?? 'Failed to update record.', type: 'error' });
+        return;
+      }
+      await load();
+    } catch {
+      setToast({ message: 'Network error — please try again.', type: 'error' });
+    }
   }
 
   // ── Styles ──
@@ -300,6 +416,7 @@ export default function EmployeeProfilePage({ params }: { params: { id: string }
   } as const;
 
   if (loading) return <div style={{ padding: 40, color: '#6b6760' }}>Loading…</div>;
+  if (loadError) return <div style={{ padding: 40, color: '#c0392b' }}>Failed to load — please refresh and try again.</div>;
   if (!emp)    return <div style={{ padding: 40, color: '#c0392b' }}>Employee not found.</div>;
 
   const prop = emp.properties;
@@ -769,6 +886,7 @@ export default function EmployeeProfilePage({ params }: { params: { id: string }
           </div>
         </div>
       )}
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

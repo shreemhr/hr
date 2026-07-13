@@ -7,7 +7,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from('companies')
-    .select('id, name, logo_url, primary_color, trial_ends_at, plan, created_at')
+    .select('id, name, legal_name, ein, logo_url, primary_color, trial_ends_at, plan, created_at')
     .eq('id', session.companyId)
     .single();
 
@@ -26,13 +26,16 @@ export async function PATCH(req: NextRequest) {
   }
 
   const body = await req.json();
-  const allowed = ['name', 'logo_url', 'primary_color'];
+  const allowed = ['name', 'legal_name', 'ein', 'logo_url', 'primary_color'];
   const updates: Record<string, unknown> = {};
 
   for (const key of allowed) {
-    if (key in body) updates[key] = body[key];
+    if (key in body) updates[key] = typeof body[key] === 'string' ? body[key].trim() || null : body[key];
   }
 
+  if ('name' in updates && !updates.name) {
+    return NextResponse.json({ error: 'Display name is required' }, { status: 400 });
+  }
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
   }

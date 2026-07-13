@@ -1,12 +1,14 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import Toast, { ToastState } from '@/components/Toast';
 
 interface Employee {
-  id: string; first_name: string; last_name: string; position_title: string;
-  property_name: string; property_state: string; pay_rate: number; pay_type: string; hire_date: string;
+  id: string; first_name: string; last_name: string; pay_rate: number; employment_type?: string;
+  positions: { title: string; pay_type: string } | null;
+  properties: { name: string; state: string } | null;
 }
-interface Company { name: string; legal_name: string; }
+interface Company { name: string; legal_name: string | null; }
 
 function fmt(dateStr: string) {
   try { return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }); }
@@ -18,8 +20,10 @@ export default function OfferLetterPage({ params }: { params: { id: string } }) 
   const [emp, setEmp]       = useState<Employee | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [saving, setSaving]   = useState(false);
-  const [saved, setSaved]     = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [toast, setToast]     = useState<ToastState | null>(null);
   const [previewHtml, setPreviewHtml] = useState('');
 
   const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -37,18 +41,20 @@ export default function OfferLetterPage({ params }: { params: { id: string } }) 
   });
 
   const load = useCallback(async () => {
-    const [er, cr, dr] = await Promise.all([
-      fetch(`/api/employees/${id}`).then(r => r.json()),
-      fetch('/api/company/settings').then(r => r.json()),
-      fetch(`/api/documents/offer-letter/${id}`).then(r => r.json()).catch(() => null),
-    ]);
-    setEmp(er.employee ?? null);
-    setCompany(cr.company ?? null);
-    if (dr?.document?.content) {
-      const c = dr.document.content;
-      setFields(prev => ({ ...prev, ...c }));
+    try {
+      const res = await fetch(`/api/documents/offer-letter/${id}`);
+      if (!res.ok) { setLoadError(true); return; }
+      const data = await res.json();
+      setEmp(data.employee ?? null);
+      setCompany(data.company ?? null);
+      if (data.document?.content) {
+        setFields(prev => ({ ...prev, ...data.document.content }));
+      }
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
@@ -57,16 +63,16 @@ export default function OfferLetterPage({ params }: { params: { id: string } }) 
   useEffect(() => {
     if (!emp || !company) return;
     const payRate = fields.customPayRate || String(emp.pay_rate);
-    const payType = (fields.customPayType || emp.pay_type) as 'hourly' | 'salary';
+    const payType = (fields.customPayType || emp.positions?.pay_type || 'hourly') as 'hourly' | 'salary';
     fetch('/api/documents/offer-letter/preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         companyName:   company.legal_name || company.name,
-        propertyName:  emp.property_name,
+        propertyName:  emp.properties?.name ?? '',
         employeeFirst: emp.first_name,
         employeeLast:  emp.last_name,
-        positionTitle: emp.position_title,
+        positionTitle: emp.positions?.title ?? '',
         startDate:     fields.startDate ? fmt(fields.startDate) : 'TBD',
         payRate,
         payType,
@@ -77,17 +83,42 @@ export default function OfferLetterPage({ params }: { params: { id: string } }) 
         acceptBy:      fields.acceptBy ? fmt(fields.acceptBy) : '',
         notes:         fields.notes,
       })
-    }).then(r => r.json()).then(d => setPreviewHtml(d.html ?? ''));
+    })
+      .then(r => r.ok ? r.text() : Promise.reject())
+      .then(html => setPreviewHtml(html))
+      .catch(() => setPreviewHtml(''));
   }, [fields, emp, company, today]);
 
   async function handleSave() {
-    setSaving(true);
-    await fetch(`/api/documents/offer-letter/${id}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields, employeeId: id }),
-    });
-    setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 2500);
+    setSaving(true); setSaveError('');
+    try {
+      const res = await fetch(`/api/documents/offer-letter/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: {
+            ...fields,
+            companyName:   company?.legal_name || company?.name || '',
+            propertyName:  emp?.properties?.name ?? '',
+            employeeFirst: emp?.first_name ?? '',
+            employeeLast:  emp?.last_name ?? '',
+            positionTitle: emp?.positions?.title ?? '',
+            payRate:       fields.customPayRate || String(emp?.pay_rate ?? ''),
+            payType:       fields.customPayType || emp?.positions?.pay_type || 'hourly',
+          },
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSaveError(data.error ?? 'Failed to save offer letter.');
+        return;
+      }
+      setToast({ message: 'Offer letter saved successfully.', type: 'success' });
+    } catch {
+      setSaveError('Network error — please try again.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   const s = {
@@ -107,9 +138,11 @@ export default function OfferLetterPage({ params }: { params: { id: string } }) 
     pHead:  { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
     pBox:   { background: '#fff', border: '1px solid #e9e4da', borderRadius: 10, flex: 1, overflow: 'hidden' },
     iframe: { width: '100%', height: 'calc(100vh - 140px)', border: 'none', borderRadius: 10 },
+    err:    { background: '#fae9e7', color: '#c0392b', border: '1px solid #f0c8c2', borderRadius: 6, padding: '10px 14px', marginBottom: 16, fontSize: 13 },
   } as const;
 
   if (loading) return <div style={{ padding: 40, color: '#6b6760' }}>Loading…</div>;
+  if (loadError) return <div style={{ padding: 40, color: '#c0392b' }}>Failed to load — please refresh and try again.</div>;
   if (!emp)    return <div style={{ padding: 40, color: '#c0392b' }}>Employee not found.</div>;
 
   return (
@@ -118,7 +151,9 @@ export default function OfferLetterPage({ params }: { params: { id: string } }) 
       <div style={s.sidebar}>
         <Link href={`/employees/${id}`} style={s.back}>← {emp.first_name} {emp.last_name}</Link>
         <h2 style={s.h2}>Offer Letter</h2>
-        <p style={s.meta}>{emp.first_name} {emp.last_name} · {emp.position_title} · {emp.property_name}</p>
+        <p style={s.meta}>{emp.first_name} {emp.last_name} · {emp.positions?.title ?? '—'} · {emp.properties?.name ?? '—'}</p>
+
+        {saveError && <div style={s.err} className="animate-shake">{saveError}</div>}
 
         <div style={s.section}>
           <div style={s.sh}>Dates</div>
@@ -134,14 +169,14 @@ export default function OfferLetterPage({ params }: { params: { id: string } }) 
           <div style={s.row}>
             <div>
               <label>Pay type</label>
-              <select value={fields.customPayType || emp.pay_type} onChange={e => setFields(p => ({ ...p, customPayType: e.target.value as 'hourly' | 'salary' }))}>
+              <select value={fields.customPayType || emp.positions?.pay_type || 'hourly'} onChange={e => setFields(p => ({ ...p, customPayType: e.target.value as 'hourly' | 'salary' }))}>
                 <option value="hourly">Hourly</option>
                 <option value="salary">Salary</option>
               </select>
             </div>
             <div>
               <label>Rate / salary</label>
-              <input type="number" step="0.01" placeholder={String(emp.pay_rate)} value={fields.customPayRate} onChange={e => setFields(p => ({ ...p, customPayRate: e.target.value }))} />
+              <input type="number" step="0.01" min="0" placeholder={String(emp.pay_rate)} value={fields.customPayRate} onChange={e => setFields(p => ({ ...p, customPayRate: e.target.value }))} />
             </div>
           </div>
           <div style={s.field}>
@@ -164,7 +199,10 @@ export default function OfferLetterPage({ params }: { params: { id: string } }) 
         </div>
 
         <div style={s.btnRow}>
-          <button style={s.btnSav} onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : saved ? '✓ Saved' : 'Save letter'}</button>
+          <button style={s.btnSav} onClick={handleSave} disabled={saving}>
+            {saving && <span className="spinner" />}
+            {saving ? 'Saving…' : 'Save letter'}
+          </button>
         </div>
         <div style={{ marginTop: 10 }}>
           <a href={`/documents/offer-letter/${id}/print`} target="_blank" rel="noreferrer"
@@ -193,6 +231,7 @@ export default function OfferLetterPage({ params }: { params: { id: string } }) 
           }
         </div>
       </div>
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

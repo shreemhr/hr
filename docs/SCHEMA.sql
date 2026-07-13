@@ -13,6 +13,8 @@ create extension if not exists "pgcrypto";
 create table if not exists companies (
   id              uuid primary key default gen_random_uuid(),
   name            text not null,
+  legal_name      text,              -- full legal entity name, used on offer letters/documents
+  ein             text,              -- federal EIN, used on offer letters/documents
   logo_url        text,
   primary_color   text default '#1a56db',
   plan            text not null default 'trial',  -- trial | starter | growth | enterprise
@@ -22,6 +24,10 @@ create table if not exists companies (
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
 );
+
+-- Existing databases: add columns if the table was created before these fields existed.
+alter table companies add column if not exists legal_name text;
+alter table companies add column if not exists ein text;
 
 -- ─── USERS (staff/HR accounts) ──────────────────────────────
 create table if not exists users (

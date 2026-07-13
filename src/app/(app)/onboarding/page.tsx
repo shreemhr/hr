@@ -14,13 +14,43 @@ interface OnboardingRow {
   tasks_done:    number;
 }
 
+interface OnboardingApiItem {
+  employee: {
+    id: string; first_name: string; last_name: string; hire_date: string | null;
+    properties: { name: string; state: string } | null;
+    positions: { title: string } | null;
+  };
+  summary: { total: number; done: number; isStarted: boolean };
+}
+
 export default function OnboardingQueuePage() {
   const [rows, setRows]       = useState<OnboardingRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [filter, setFilter]   = useState<'all' | 'pending' | 'complete'>('pending');
 
   useEffect(() => {
-    fetch('/api/onboarding').then(r => r.json()).then(d => { setRows(d.queue ?? []); setLoading(false); });
+    fetch('/api/onboarding')
+      .then(async r => {
+        if (!r.ok) { setLoadError(true); return; }
+        const data: OnboardingApiItem[] = await r.json();
+        const mapped: OnboardingRow[] = (Array.isArray(data) ? data : [])
+          .filter(item => item.summary.isStarted)
+          .map(item => ({
+            employee_id:    item.employee.id,
+            first_name:     item.employee.first_name,
+            last_name:      item.employee.last_name,
+            property_name:  item.employee.properties?.name ?? '—',
+            property_state: item.employee.properties?.state ?? '',
+            position_title: item.employee.positions?.title ?? '—',
+            hire_date:      item.employee.hire_date ?? '',
+            tasks_total:    item.summary.total,
+            tasks_done:     item.summary.done,
+          }));
+        setRows(mapped);
+      })
+      .catch(() => setLoadError(true))
+      .finally(() => setLoading(false));
   }, []);
 
   const filtered = rows.filter(r => {
@@ -71,6 +101,8 @@ export default function OnboardingQueuePage() {
         <div style={s.hdr}><span>Employee</span><span>Property</span><span>Position</span><span>Hired</span><span>Progress</span></div>
         {loading
           ? <div style={{ padding: 24, color: '#6b6760' }}>Loading…</div>
+          : loadError
+            ? <div style={{ padding: 24, color: '#c0392b' }}>Failed to load — please refresh and try again.</div>
           : filtered.length === 0
             ? <div style={{ padding: 32, textAlign: 'center', color: '#a8a39a' }}>
                 {filter === 'pending' ? 'No pending onboarding 🎉' : filter === 'complete' ? 'No completed onboarding yet.' : 'No onboarding records. Start by adding employees and clicking "Start onboarding."'}

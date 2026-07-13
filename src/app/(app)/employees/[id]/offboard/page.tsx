@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import Toast, { ToastState } from '@/components/Toast';
 
 interface OffboardRecord {
   id: string; termination_type: string; last_day: string | null;
@@ -41,16 +42,23 @@ export default function OffboardPage({ params }: { params: { id: string } }) {
   const [notify,    setNotify]    = useState('');
   const [starting,  setStarting]  = useState(false);
   const [error,     setError]     = useState('');
+  const [loadError, setLoadError] = useState(false);
+  const [toast,     setToast]     = useState<ToastState | null>(null);
 
   const load = useCallback(async () => {
-    const [er, obr] = await Promise.all([
-      fetch(`/api/employees/${id}`).then(r => r.json()),
-      fetch(`/api/employees/${id}/offboard`).then(r => r.json()),
-    ]);
-    setEmp(er);
-    setRecord(obr.record ?? null);
-    setTasks(obr.tasks ?? []);
-    setLoading(false);
+    try {
+      const [er, obr] = await Promise.all([
+        fetch(`/api/employees/${id}`).then(r => r.json()),
+        fetch(`/api/employees/${id}/offboard`).then(r => r.json()),
+      ]);
+      setEmp(er);
+      setRecord(obr.record ?? null);
+      setTasks(obr.tasks ?? []);
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
@@ -76,12 +84,21 @@ export default function OffboardPage({ params }: { params: { id: string } }) {
 
   async function toggleTask(taskId: string, current: string) {
     const next = current === 'complete' ? 'pending' : 'complete';
-    await fetch(`/api/offboarding/${taskId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: next }),
-    });
-    await load();
+    try {
+      const res = await fetch(`/api/offboarding/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: next }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setToast({ message: data.error ?? 'Failed to update task.', type: 'error' });
+        return;
+      }
+      await load();
+    } catch {
+      setToast({ message: 'Network error — please try again.', type: 'error' });
+    }
   }
 
   const s = {
@@ -100,6 +117,7 @@ export default function OffboardPage({ params }: { params: { id: string } }) {
   } as const;
 
   if (loading) return <div style={{ padding: 32, color: '#6b6760' }}>Loading…</div>;
+  if (loadError) return <div style={{ padding: 32, color: '#c0392b' }}>Failed to load — please refresh and try again.</div>;
   if (!emp)    return <div style={{ padding: 32, color: '#c0392b' }}>Employee not found.</div>;
 
   const prop = emp.properties as unknown as { name: string } | null;
@@ -210,6 +228,7 @@ export default function OffboardPage({ params }: { params: { id: string } }) {
           </div>
         </>
       )}
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

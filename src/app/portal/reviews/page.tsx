@@ -22,9 +22,16 @@ const RATING_COLORS: Record<string, { bg: string; color: string }> = {
 export default function PortalReviewsPage() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
-    fetch('/api/portal/reviews').then(r => r.json()).then(d => { setReviews(d); setLoading(false); });
+    fetch('/api/portal/reviews')
+      .then(async r => {
+        if (!r.ok) { setLoadError(true); return; }
+        setReviews(await r.json());
+      })
+      .catch(() => setLoadError(true))
+      .finally(() => setLoading(false));
   }, []);
 
   const s = {
@@ -34,6 +41,7 @@ export default function PortalReviewsPage() {
   };
 
   if (loading) return <div style={{ color: '#6b6760' }}>Loading…</div>;
+  if (loadError) return <div style={{ color: '#c0392b' }}>Failed to load — please refresh, or sign in again if your session expired.</div>;
 
   return (
     <div>

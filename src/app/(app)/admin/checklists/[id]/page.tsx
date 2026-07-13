@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Toast, { ToastState } from '@/components/Toast';
 
 interface TemplateItem { id: string; title: string; description: string | null; sort_order: number; }
 interface Assignment {
@@ -23,16 +24,24 @@ export default function ChecklistDetailPage({ params }: { params: { id: string }
   const [newItemDesc,  setNewItemDesc]  = useState('');
   const [addingItem,   setAddingItem]   = useState(false);
   const [saving,       setSaving]       = useState(false);
+  const [loadError,    setLoadError]    = useState(false);
+  const [toast,        setToast]        = useState<ToastState | null>(null);
 
   const load = useCallback(async () => {
-    const [tRes, aRes] = await Promise.all([
-      fetch(`/api/checklists/${id}`).then(r => r.json()),
-      fetch(`/api/checklists/${id}/assign`).then(r => r.json()).catch(() => []),
-    ]);
-    setTemplate(tRes.template);
-    setItems(tRes.items ?? []);
-    setAssignments(aRes);
-    setLoading(false);
+    try {
+      const [tRes, aRes] = await Promise.all([
+        fetch(`/api/checklists/${id}`).then(r => r.json()).catch(() => null),
+        fetch(`/api/checklists/${id}/assign`).then(r => r.json()).catch(() => []),
+      ]);
+      if (!tRes) { setLoadError(true); return; }
+      setTemplate(tRes.template);
+      setItems(tRes.items ?? []);
+      setAssignments(Array.isArray(aRes) ? aRes : []);
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
@@ -40,25 +49,47 @@ export default function ChecklistDetailPage({ params }: { params: { id: string }
   async function addItem() {
     if (!newItemTitle.trim()) return;
     setAddingItem(true);
-    await fetch(`/api/checklists/${id}/items`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: newItemTitle.trim(), description: newItemDesc.trim() || null }),
-    });
-    setNewItemTitle(''); setNewItemDesc('');
-    await load();
-    setAddingItem(false);
+    try {
+      const res = await fetch(`/api/checklists/${id}/items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newItemTitle.trim(), description: newItemDesc.trim() || null }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setToast({ message: data.error ?? 'Failed to add item.', type: 'error' });
+        return;
+      }
+      setNewItemTitle(''); setNewItemDesc('');
+      await load();
+      setToast({ message: 'Item added.', type: 'success' });
+    } catch {
+      setToast({ message: 'Network error — please try again.', type: 'error' });
+    } finally {
+      setAddingItem(false);
+    }
   }
 
   async function toggleActive() {
     setSaving(true);
-    await fetch(`/api/checklists/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ active: !template?.active }),
-    });
-    await load();
-    setSaving(false);
+    try {
+      const res = await fetch(`/api/checklists/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: !template?.active }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setToast({ message: data.error ?? 'Failed to update template.', type: 'error' });
+        return;
+      }
+      await load();
+      setToast({ message: template?.active ? 'Template archived.' : 'Template restored.', type: 'success' });
+    } catch {
+      setToast({ message: 'Network error — please try again.', type: 'error' });
+    } finally {
+      setSaving(false);
+    }
   }
 
   const s = {
@@ -79,6 +110,7 @@ export default function ChecklistDetailPage({ params }: { params: { id: string }
   };
 
   if (loading) return <div style={{ padding: 32, color: '#6b6760' }}>Loading…</div>;
+  if (loadError) return <div style={{ padding: 32, color: '#c0392b' }}>Failed to load — please refresh and try again.</div>;
   if (!template) return <div style={{ padding: 32, color: '#c0392b' }}>Template not found.</div>;
 
   return (
@@ -165,6 +197,7 @@ export default function ChecklistDetailPage({ params }: { params: { id: string }
           </div>
         </div>
       </div>
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

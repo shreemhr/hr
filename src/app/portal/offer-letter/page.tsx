@@ -7,7 +7,6 @@ interface OfferLetterData {
   acknowledged: boolean;
   acknowledged_at: string | null;
   signature_name: string | null;
-  previewUrl: string | null;
 }
 
 export default function PortalOfferLetterPage() {
@@ -17,11 +16,17 @@ export default function PortalOfferLetterPage() {
   const [done,   setDone]   = useState(false);
   const [error,  setError]  = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     fetch('/api/portal/offer-letter')
-      .then(r => r.json())
-      .then(d => { setData(d); if (d.acknowledged) setDone(true); setLoading(false); });
+      .then(async r => {
+        if (!r.ok) { setLoadError(true); return; }
+        const d = await r.json();
+        setData(d); if (d.acknowledged) setDone(true);
+      })
+      .catch(() => setLoadError(true))
+      .finally(() => setLoading(false));
   }, []);
 
   async function acknowledge() {
@@ -50,6 +55,7 @@ export default function PortalOfferLetterPage() {
   };
 
   if (loading) return <div style={{ color: '#6b6760' }}>Loading…</div>;
+  if (loadError) return <div style={{ color: '#c0392b' }}>Failed to load — please refresh, or sign in again if your session expired.</div>;
 
   return (
     <div>

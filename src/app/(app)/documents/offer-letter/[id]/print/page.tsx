@@ -10,12 +10,17 @@ export default async function PrintOfferLetterPage({
 }) {
   const session = await requireSession();
 
+  // params.id is the employee_id (consistent with the editor route and its API) — fetch that
+  // employee's most recently saved offer letter, not a document row keyed by this id directly.
   const { data: doc } = await supabase
     .from('documents')
     .select('*, employees(first_name, last_name)')
-    .eq('id', params.id)
+    .eq('employee_id', params.id)
+    .eq('type', 'offer_letter')
     .eq('company_id', session.companyId)
-    .single();
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   if (!doc) notFound();
 
@@ -84,19 +89,17 @@ export default async function PrintOfferLetterPage({
           <span style={{ fontWeight: 600, fontSize: 14 }}>
             Offer Letter — {fields.employeeFirst} {fields.employeeLast}
           </span>
-          <button onClick={() => window.print()}>🖨 Print / Save PDF</button>
+          <button id="print-btn">🖨 Print / Save PDF</button>
           <a href={`/documents/offer-letter/${params.id}`}>← Back to editor</a>
         </div>
         <div
           className="letter-wrap"
           dangerouslySetInnerHTML={{ __html: html }}
         />
+        {/* Server Components can't attach event handlers — wire the print button via a plain script instead. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `
-              document.querySelector('button[onClick]') || 
-              document.querySelector('button')?.addEventListener('click', () => window.print());
-            `,
+            __html: `document.getElementById('print-btn').addEventListener('click', () => window.print());`,
           }}
         />
       </body>

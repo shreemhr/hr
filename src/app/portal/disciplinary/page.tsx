@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Toast, { ToastState } from '@/components/Toast';
 
 interface DiscRecord {
   id: string; type: string; issued_date: string; description: string;
@@ -16,22 +17,42 @@ const TYPE_LABELS: Record<string, string> = {
 export default function PortalDisciplinaryPage() {
   const [records,  setRecords]  = useState<DiscRecord[]>([]);
   const [loading,  setLoading]  = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [ackingId, setAckingId] = useState<string | null>(null);
-  const [response, setResponse] = useState('');
+  const [responses, setResponses] = useState<Record<string, string>>({});
+  const [toast, setToast] = useState<ToastState | null>(null);
 
   useEffect(() => {
-    fetch('/api/portal/disciplinary').then(r => r.json()).then(d => { setRecords(d); setLoading(false); });
+    fetch('/api/portal/disciplinary')
+      .then(async r => {
+        if (!r.ok) { setLoadError(true); return; }
+        setRecords(await r.json());
+      })
+      .catch(() => setLoadError(true))
+      .finally(() => setLoading(false));
   }, []);
 
   async function acknowledge(id: string) {
     setAckingId(id);
-    await fetch('/api/portal/disciplinary', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ record_id: id, employee_response: response }),
-    });
-    setResponse('');
-    const updated = await fetch('/api/portal/disciplinary').then(r => r.json());
-    setRecords(updated); setAckingId(null);
+    try {
+      const res = await fetch('/api/portal/disciplinary', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ record_id: id, employee_response: responses[id] ?? '' }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setToast({ message: data.error ?? 'Failed to save acknowledgement.', type: 'error' });
+        return;
+      }
+      setResponses(prev => { const next = { ...prev }; delete next[id]; return next; });
+      const updated = await fetch('/api/portal/disciplinary').then(r => r.json());
+      setRecords(updated);
+      setToast({ message: 'Acknowledgement saved.', type: 'success' });
+    } catch {
+      setToast({ message: 'Network error — please try again.', type: 'error' });
+    } finally {
+      setAckingId(null);
+    }
   }
 
   const pending = records.filter(r => !r.employee_acknowledged);
@@ -45,6 +66,7 @@ export default function PortalDisciplinaryPage() {
   } as const;
 
   if (loading) return <div style={{ color: '#6b6760' }}>Loading…</div>;
+  if (loadError) return <div style={{ color: '#c0392b' }}>Failed to load — please refresh, or sign in again if your session expired.</div>;
 
   return (
     <div>
@@ -89,7 +111,12 @@ export default function PortalDisciplinaryPage() {
               <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#34313d', marginBottom: 6 }}>
                 Your response (optional)
               </label>
-              <textarea style={s.ta} placeholder="Add any comments or context…" value={response} onChange={e => setResponse(e.target.value)} />
+              <textarea
+                style={s.ta}
+                placeholder="Add any comments or context…"
+                value={responses[r.id] ?? ''}
+                onChange={e => setResponses(prev => ({ ...prev, [r.id]: e.target.value }))}
+              />
               <button style={{ ...s.btn, marginTop: 10 }} onClick={() => acknowledge(r.id)} disabled={ackingId === r.id}>
                 {ackingId === r.id ? 'Saving…' : 'I have read and acknowledge this record'}
               </button>
@@ -103,6 +130,7 @@ export default function PortalDisciplinaryPage() {
           )}
         </div>
       ))}
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

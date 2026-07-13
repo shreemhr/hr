@@ -66,7 +66,7 @@ export default function AppShell(props: Props) {
           )}
         </div>
 
-        <nav style={{ flex: 1, padding: '12px 0', overflowY: 'auto' }}>
+        <nav className="sidebar-nav" style={{ flex: 1, padding: '12px 0', overflowY: 'auto' }}>
           <NavItem href="/dashboard" label="Dashboard" icon="⬜" collapsed={collapsed} />
           {props.isAdmin && <>
             <SectionLabel collapsed={collapsed}>Admin</SectionLabel>
@@ -123,7 +123,7 @@ export default function AppShell(props: Props) {
         </button>
       </aside>
 
-      <main style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
+      <main className="app-main-scroll" style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
         {props.billingBanner}
         {showBack && (
           <div className="app-content" style={{ padding: '20px 32px 0' }}>

@@ -17,11 +17,17 @@ const STATUS_CONFIG = {
 export default function PortalOnboardingPage() {
   const [tasks,   setTasks]   = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     fetch('/api/portal/onboarding')
-      .then(r => r.json())
-      .then(d => { setTasks(d.tasks ?? []); setLoading(false); });
+      .then(async r => {
+        if (!r.ok) { setLoadError(true); return; }
+        const d = await r.json();
+        setTasks(d.tasks ?? []);
+      })
+      .catch(() => setLoadError(true))
+      .finally(() => setLoading(false));
   }, []);
 
   const total   = tasks.length;
@@ -43,6 +49,7 @@ export default function PortalOnboardingPage() {
   };
 
   if (loading) return <div style={{ color: '#6b6760' }}>Loading…</div>;
+  if (loadError) return <div style={{ color: '#c0392b' }}>Failed to load — please refresh, or sign in again if your session expired.</div>;
 
   return (
     <div>

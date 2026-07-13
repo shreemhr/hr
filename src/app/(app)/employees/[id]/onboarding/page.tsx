@@ -1,50 +1,81 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import Toast, { ToastState } from '@/components/Toast';
 
 interface Task {
   id: string;
   form_id: string;
   form_name: string;
   description?: string;
-  form_link?: string;
+  link?: string;
   status: 'pending' | 'collected' | 'na';
   collected_at?: string;
   notes?: string;
 }
-interface EmpInfo { first_name: string; last_name: string; property_name: string; property_state: string; }
+interface EmpInfo { first_name: string; last_name: string; properties: { name: string; state: string } | null; }
 
 export default function EmployeeOnboardingPage({ params }: { params: { id: string } }) {
   const { id } = params;
   const [tasks, setTasks]   = useState<Task[]>([]);
   const [emp, setEmp]       = useState<EmpInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [updating, setUpdating] = useState<string | null>(null);
   const [noteEdit, setNoteEdit] = useState<{ id: string; value: string } | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
 
   const load = useCallback(async () => {
-    const [er, or] = await Promise.all([
-      fetch(`/api/employees/${id}`).then(r => r.json()),
-      fetch(`/api/onboarding?employeeId=${id}`).then(r => r.json()),
-    ]);
-    setEmp(er.employee ?? null);
-    setTasks(or.tasks ?? []);
-    setLoading(false);
+    try {
+      const [empRes, onboardRes] = await Promise.all([
+        fetch(`/api/employees/${id}`),
+        fetch(`/api/onboarding?employee_id=${id}`),
+      ]);
+      if (!empRes.ok) { setEmp(null); setLoadError(true); return; }
+      const empData = await empRes.json();
+      const onboardData = await onboardRes.json();
+      setEmp(empData ?? null);
+      setTasks(Array.isArray(onboardData) ? (onboardData[0]?.tasks ?? []) : []);
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
 
   async function setStatus(taskId: string, status: 'pending' | 'collected' | 'na') {
     setUpdating(taskId);
-    await fetch(`/api/onboarding/${taskId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) });
-    await load();
-    setUpdating(null);
+    try {
+      const res = await fetch(`/api/onboarding/${taskId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setToast({ message: data.error ?? 'Failed to update task.', type: 'error' });
+        return;
+      }
+      await load();
+    } catch {
+      setToast({ message: 'Network error — please try again.', type: 'error' });
+    } finally {
+      setUpdating(null);
+    }
   }
 
   async function saveNote(taskId: string, note: string) {
-    await fetch(`/api/onboarding/${taskId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes: note }) });
-    setNoteEdit(null);
-    load();
+    try {
+      const res = await fetch(`/api/onboarding/${taskId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes: note }) });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setToast({ message: data.error ?? 'Failed to save note.', type: 'error' });
+        return;
+      }
+      setNoteEdit(null);
+      setToast({ message: 'Note saved.', type: 'success' });
+      load();
+    } catch {
+      setToast({ message: 'Network error — please try again.', type: 'error' });
+    }
   }
 
   const collected = tasks.filter(t => t.status === 'collected').length;
@@ -86,6 +117,7 @@ export default function EmployeeOnboardingPage({ params }: { params: { id: strin
   } as const;
 
   if (loading) return <div style={{ padding: 40, color: '#6b6760' }}>Loading…</div>;
+  if (loadError) return <div style={{ padding: 40, color: '#c0392b' }}>Failed to load — please refresh and try again.</div>;
   if (!emp)    return <div style={{ padding: 40, color: '#c0392b' }}>Employee not found.</div>;
 
   return (
@@ -94,7 +126,7 @@ export default function EmployeeOnboardingPage({ params }: { params: { id: strin
 
       <div style={s.head}>
         <h1 style={s.h1}>Onboarding checklist</h1>
-        <p style={s.meta}>{emp.first_name} {emp.last_name} · {emp.property_name} ({emp.property_state})</p>
+        <p style={s.meta}>{emp.first_name} {emp.last_name} {emp.properties ? `· ${emp.properties.name} (${emp.properties.state})` : ''}</p>
       </div>
 
       {/* Progress card */}
@@ -142,8 +174,8 @@ export default function EmployeeOnboardingPage({ params }: { params: { id: strin
                   </div>
                 )}
               </div>
-              {task.form_link && (
-                <a href={task.form_link} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: '#4f46e5', textDecoration: 'none', flexShrink: 0 }}>
+              {task.link && (
+                <a href={task.link} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: '#4f46e5', textDecoration: 'none', flexShrink: 0 }}>
                   ↗ Official form
                 </a>
               )}
@@ -190,6 +222,7 @@ export default function EmployeeOnboardingPage({ params }: { params: { id: strin
           </div>
         ))
       )}
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

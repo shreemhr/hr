@@ -27,16 +27,24 @@ export default function CompensationClient() {
   const [pending, setPending] = useState<Exception[]>([]);
   const [history, setHistory] = useState<Exception[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   const load = async () => {
-    const [pos, exc] = await Promise.all([
-      fetch('/api/positions').then(r => r.json()).catch(() => []),
-      fetch('/api/compensation/exceptions').then(r => r.json()).catch(() => []),
+    const [posRes, excRes] = await Promise.all([
+      fetch('/api/positions').catch(() => null),
+      fetch('/api/compensation/exceptions').catch(() => null),
     ]);
+    let hadError = false;
+    let pos: unknown = [];
+    let exc: unknown = [];
+    if (posRes?.ok) pos = await posRes.json(); else hadError = true;
+    if (excRes?.ok) exc = await excRes.json(); else hadError = true;
+
     setPositions(Array.isArray(pos) ? pos : []);
     const all: Exception[] = Array.isArray(exc) ? exc : [];
     setPending(all.filter(e => e.status === 'pending'));
     setHistory(all.filter(e => e.status !== 'pending'));
+    setLoadError(hadError);
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
@@ -64,6 +72,12 @@ export default function CompensationClient() {
         </button>
         <button style={s.tab(tab === 'history')} onClick={() => setTab('history')}>History</button>
       </div>
+
+      {loadError && (
+        <div style={{ background: C.redLt, color: C.red, borderRadius: 10, padding: '12px 16px', marginTop: 20, fontSize: 13 }}>
+          Some data failed to load — figures below may be incomplete. Refresh to try again.
+        </div>
+      )}
 
       {loading ? <div style={{ padding: 28, color: C.text2 }}>Loading…</div> : (
         <>
@@ -110,6 +124,8 @@ function BandRow({ pos, onSaved }: { pos: Position; onSaved: () => void }) {
 
   async function save() {
     setErr('');
+    if (min !== '' && Number(min) < 0) { setErr('Min cannot be negative'); return; }
+    if (max !== '' && Number(max) < 0) { setErr('Max cannot be negative'); return; }
     if (min !== '' && max !== '' && Number(min) > Number(max)) { setErr('Min cannot exceed max'); return; }
     setSaving(true);
     const res = await fetch(`/api/positions/${pos.id}`, {
@@ -136,13 +152,13 @@ function BandRow({ pos, onSaved }: { pos: Position; onSaved: () => void }) {
       <td style={{ padding: '14px 20px', borderBottom: `1px solid ${C.line}` }}>
         <span style={{ position: 'relative' }}>
           <span style={{ position: 'absolute', left: 9, top: 7, color: C.text3, fontSize: 13 }}>$</span>
-          <input value={min} onChange={e => setMin(e.target.value)} type="number" step="0.25" placeholder="—" style={{ ...inputStyle, paddingLeft: 20 }} />
+          <input value={min} onChange={e => setMin(e.target.value)} type="number" step="0.25" min="0" placeholder="—" style={{ ...inputStyle, paddingLeft: 20 }} />
         </span>
       </td>
       <td style={{ padding: '14px 20px', borderBottom: `1px solid ${C.line}` }}>
         <span style={{ position: 'relative' }}>
           <span style={{ position: 'absolute', left: 9, top: 7, color: C.text3, fontSize: 13 }}>$</span>
-          <input value={max} onChange={e => setMax(e.target.value)} type="number" step="0.25" placeholder="—" style={{ ...inputStyle, paddingLeft: 20 }} />
+          <input value={max} onChange={e => setMax(e.target.value)} type="number" step="0.25" min="0" placeholder="—" style={{ ...inputStyle, paddingLeft: 20 }} />
         </span>
         <span style={{ fontSize: 11, color: C.text3, marginLeft: 5 }}>{unit}</span>
       </td>
@@ -176,19 +192,26 @@ function ApprovalCard({ exc, onDecide }: { exc: Exception; onDecide: () => void 
   const [busy, setBusy] = useState(false);
   const [showDeny, setShowDeny] = useState(false);
   const [note, setNote] = useState('');
+  const [err, setErr] = useState('');
   const fmt = (n: number) => exc.pay_type === 'salary' ? `$${n.toLocaleString()}/yr` : `$${n.toFixed(2)}/hr`;
   const name = exc.employees ? `${exc.employees.first_name} ${exc.employees.last_name}` : 'Employee';
   const band = `${exc.band_min != null ? '$' + Number(exc.band_min).toFixed(2) : '—'}–${exc.band_max != null ? '$' + Number(exc.band_max).toFixed(2) : '—'}`;
 
   async function decide(decision: 'approved' | 'denied') {
-    setBusy(true);
-    const res = await fetch(`/api/compensation/exceptions/${exc.id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ decision, note: note || undefined }),
-    });
-    setBusy(false);
-    if (res.ok) onDecide();
-    else { const d = await res.json().catch(() => ({})); alert(d.error ?? 'Failed'); }
+    setBusy(true); setErr('');
+    try {
+      const res = await fetch(`/api/compensation/exceptions/${exc.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision, note: note || undefined }),
+      });
+      if (res.ok) { onDecide(); return; }
+      const d = await res.json().catch(() => ({}));
+      setErr(d.error ?? 'Failed to save decision.');
+    } catch {
+      setErr('Network error — please try again.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -204,6 +227,7 @@ function ApprovalCard({ exc, onDecide }: { exc: Exception; onDecide: () => void 
           <div style={{ fontSize: 12, color: C.text3, marginTop: 2 }}>band {band}</div>
         </div>
       </div>
+      {err && <div style={{ fontSize: 13, color: C.red, marginTop: 12 }}>{err}</div>}
       {showDeny && (
         <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Optional note to the requester…" style={{ width: '100%', marginTop: 14, padding: '10px 13px', border: `1.5px solid ${C.line}`, borderRadius: 9, fontSize: 14, minHeight: 60, resize: 'vertical' }} />
       )}
