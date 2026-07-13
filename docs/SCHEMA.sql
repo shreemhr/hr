@@ -168,7 +168,10 @@ begin
 end;
 $$;
 
-do $$ begin
+do $$
+declare
+  tbl text;
+begin
   for tbl in
     select unnest(array[
       'companies','users','properties','positions',
