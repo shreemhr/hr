@@ -22,11 +22,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Email and password required' }, { status: 400 });
     }
 
-    const { data: user } = await supabase
+    const { data: user, error: userErr } = await supabase
       .from('users')
       .select('id, company_id, name, email, role, property_ids, password_hash, active')
       .eq('email', email.toLowerCase().trim())
       .single();
+
+    if (userErr && userErr.code !== 'PGRST116') {
+      console.error('login: user lookup failed', userErr);
+      return NextResponse.json({ error: `Server error: ${userErr.message}` }, { status: 500 });
+    }
 
     if (!user) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });

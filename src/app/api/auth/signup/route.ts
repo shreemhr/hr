@@ -37,7 +37,8 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (compErr || !company) {
-      return NextResponse.json({ error: 'Failed to create company' }, { status: 500 });
+      console.error('signup: company insert failed', compErr);
+      return NextResponse.json({ error: `Failed to create company: ${compErr?.message ?? 'unknown error'}` }, { status: 500 });
     }
 
     // Hash password using Web Crypto (bcrypt not available in Edge; use sha256 w/ salt for demo)
@@ -65,9 +66,10 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (userErr || !user) {
+      console.error('signup: user insert failed', userErr);
       // Rollback company
       await supabase.from('companies').delete().eq('id', company.id);
-      return NextResponse.json({ error: 'Failed to create user' }, { status: 500 });
+      return NextResponse.json({ error: `Failed to create user: ${userErr?.message ?? 'unknown error'}` }, { status: 500 });
     }
 
     // Set session
