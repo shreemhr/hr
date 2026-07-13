@@ -13,10 +13,11 @@ export default function UsersPage() {
   const [newPass, setNewPass]     = useState('');
   const [form, setForm]           = useState({ name: '', email: '', role: 'hr' as string, propertyIds: [] as string[] });
   const [saving, setSaving]       = useState(false);
+  const [search, setSearch]       = useState('');
 
   const load = async () => {
     const [ud, pd] = await Promise.all([fetch('/api/users').then(r => r.json()), fetch('/api/properties').then(r => r.json())]);
-    setUsers(ud.users ?? []); setProperties(pd.properties ?? []); setLoading(false);
+    setUsers(Array.isArray(ud) ? ud : []); setProperties(Array.isArray(pd) ? pd : []); setLoading(false);
   };
   useEffect(() => { load(); }, []);
 
@@ -54,12 +55,23 @@ export default function UsersPage() {
     chip:  (a: boolean) => ({ padding: '5px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: `1px solid ${a ? '#4f46e5' : '#e9e4da'}`, background: a ? '#eef2ff' : '#faf8f4', color: a ? '#4f46e5' : '#6b6760' }),
   } as const;
 
+  const filtered = users.filter(u => {
+    const q = search.toLowerCase();
+    return !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || (ROLE_LABELS[u.role] ?? u.role).toLowerCase().includes(q);
+  });
+
   return (
     <div style={s.page}>
       <div style={s.head}>
         <h1 style={s.h1}>Users <span style={{ fontWeight: 400, color: '#6b6760', fontSize: 16 }}>({users.length})</span></h1>
         <button style={s.btn} onClick={() => setShowForm(p => !p)}>+ Invite user</button>
       </div>
+
+      {users.length > 0 && (
+        <div className="search-box">
+          <input placeholder="Search by name, email, or role…" value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+      )}
 
       {newPass && (
         <div style={s.toast}>
@@ -105,8 +117,9 @@ export default function UsersPage() {
       <div style={s.card}>
         {loading ? <div style={{ padding: 24, color: '#6b6760' }}>Loading…</div>
           : users.length === 0 ? <div style={{ padding: 32, textAlign: 'center', color: '#a8a39a' }}>No users yet.</div>
-          : users.map((u, i) => (
-            <div key={u.id} style={{ ...s.row, ...(i === users.length - 1 ? { borderBottom: 'none' } : {}), opacity: u.status === 'inactive' ? 0.6 : 1 }}>
+          : filtered.length === 0 ? <div style={{ padding: 32, textAlign: 'center', color: '#a8a39a' }}>No users match &quot;{search}&quot;.</div>
+          : filtered.map((u, i) => (
+            <div key={u.id} className="card-hover" style={{ ...s.row, ...(i === filtered.length - 1 ? { borderBottom: 'none' } : {}), opacity: u.status === 'inactive' ? 0.6 : 1 }}>
               <div>
                 <div style={{ fontWeight: 600, fontSize: 14 }}>{u.name}</div>
                 <div style={{ fontSize: 12, color: '#6b6760', marginTop: 2 }}>{u.email} · {ROLE_LABELS[u.role] ?? u.role}</div>

@@ -24,7 +24,7 @@ export default function DocumentsPage() {
       fetch('/api/documents/offer-letter/list').then(r => r.json()),
       fetch('/api/employees').then(r => r.json()),
     ]).then(([dd, ed]) => {
-      setDocs(dd.documents ?? []); setEmployees(ed.employees ?? []); setLoading(false);
+      setDocs(Array.isArray(dd) ? dd : []); setEmployees(Array.isArray(ed) ? ed : []); setLoading(false);
     });
   }, []);
 

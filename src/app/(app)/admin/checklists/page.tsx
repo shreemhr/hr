@@ -19,10 +19,16 @@ const CATEGORY_LABELS: Record<string, string> = {
 export default function ChecklistsPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading,   setLoading]   = useState(true);
+  const [search,    setSearch]    = useState('');
 
   useEffect(() => {
-    fetch('/api/checklists').then(r => r.json()).then(d => { setTemplates(d); setLoading(false); });
+    fetch('/api/checklists').then(r => r.json()).then(d => { setTemplates(Array.isArray(d) ? d : []); setLoading(false); });
   }, []);
+
+  const filtered = templates.filter(t => {
+    const q = search.toLowerCase();
+    return !q || t.name.toLowerCase().includes(q) || (CATEGORY_LABELS[t.category] ?? t.category).toLowerCase().includes(q);
+  });
 
   const s = {
     page:  { padding: 32, maxWidth: 900 },
@@ -60,8 +66,18 @@ export default function ChecklistsPage() {
         </div>
       )}
 
-      {templates.map(t => (
-        <Link key={t.id} href={`/admin/checklists/${t.id}`} style={s.card}>
+      {!loading && templates.length > 0 && (
+        <div className="search-box">
+          <input placeholder="Search by name or category…" value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+      )}
+
+      {!loading && templates.length > 0 && filtered.length === 0 && (
+        <div style={s.empty}>No templates match &quot;{search}&quot;.</div>
+      )}
+
+      {filtered.map(t => (
+        <Link key={t.id} href={`/admin/checklists/${t.id}`} style={s.card} className="card-hover">
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={s.name}>{t.name}</span>

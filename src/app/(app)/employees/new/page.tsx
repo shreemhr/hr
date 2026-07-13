@@ -15,7 +15,7 @@ export default function NewEmployeePage() {
 
   useEffect(() => {
     Promise.all([fetch('/api/properties').then(r => r.json()), fetch('/api/positions').then(r => r.json())])
-      .then(([pd, posd]) => { setProperties(pd.properties ?? []); setPositions(posd.positions ?? []); });
+      .then(([pd, posd]) => { setProperties(Array.isArray(pd) ? pd : []); setPositions(Array.isArray(posd) ? posd : []); });
   }, []);
 
   const validPositions = positions.filter(p => !p.property_ids?.length || p.property_ids.includes(form.propertyId));

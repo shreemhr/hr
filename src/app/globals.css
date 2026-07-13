@@ -191,6 +191,45 @@ label {
   transform: translateY(-2px);
 }
 
+/* Centers each page's own root element (whatever max-width it declares)
+   inside the app shell's main content area, without needing per-page changes. */
+.app-content > * {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.search-box { position: relative; margin-bottom: 16px; }
+.search-box input {
+  padding-left: 34px;
+}
+.search-box::before {
+  content: '🔍';
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 13px;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--border-md);
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.filter-chip:hover { border-color: var(--blue); color: var(--blue); }
+.filter-chip.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+
 .badge {
   display: inline-flex;
   align-items: center;

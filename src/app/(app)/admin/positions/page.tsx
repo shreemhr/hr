@@ -25,6 +25,7 @@ export default function PositionsPage() {
   const [saving, setSaving] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState('');
+  const [search, setSearch] = useState('');
 
   const load = async () => {
     const [posData, hireData] = await Promise.all([
@@ -83,12 +84,23 @@ export default function PositionsPage() {
     input: { padding: '6px 8px', border: '1px solid #ddd8cd', borderRadius: 6, fontSize: 13, width: 64 },
   } as const;
 
+  const filtered = positions.filter(pos => {
+    const q = search.toLowerCase();
+    return !q || pos.title.toLowerCase().includes(q) || pos.department?.toLowerCase().includes(q);
+  });
+
   return (
     <div style={s.page}>
       <div style={s.head}>
         <h1 style={s.h1}>Positions <span style={{ fontWeight: 400, color: '#6b6760', fontSize: 16 }}>({positions.length})</span></h1>
         <button style={s.btn} onClick={() => setShowForm(p => !p)}>+ Add position</button>
       </div>
+
+      {positions.length > 0 && (
+        <div className="search-box">
+          <input placeholder="Search by title or department…" value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+      )}
 
       {showForm && (
         <form onSubmit={handleAdd} style={s.form}>
@@ -124,11 +136,12 @@ export default function PositionsPage() {
       <div style={s.card}>
         {loading ? <div style={{ padding: 24, color: '#6b6760' }}>Loading…</div>
           : positions.length === 0 ? <div style={{ padding: 32, textAlign: 'center', color: '#a8a39a' }}>No positions yet.</div>
-          : positions.map((pos, i) => {
+          : filtered.length === 0 ? <div style={{ padding: 32, textAlign: 'center', color: '#a8a39a' }}>No positions match &quot;{search}&quot;.</div>
+          : filtered.map((pos, i) => {
               const h = hiring[pos.id];
               const hasTarget = pos.headcount_target != null;
               return (
-                <div key={pos.id} style={{ ...s.row, ...(i === positions.length - 1 ? { borderBottom: 'none' } : {}) }}>
+                <div key={pos.id} className="card-hover" style={{ ...s.row, ...(i === filtered.length - 1 ? { borderBottom: 'none' } : {}) }}>
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
                       {pos.title}

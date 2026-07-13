@@ -10,8 +10,9 @@ export default function PropertiesPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm]       = useState({ name: '', city: '', state: 'TX', brand: '', is_marriott: false });
   const [saving, setSaving]   = useState(false);
+  const [search, setSearch]   = useState('');
 
-  const load = () => fetch('/api/properties').then(r => r.json()).then(d => { setProps(d.properties ?? []); setLoading(false); });
+  const load = () => fetch('/api/properties').then(r => r.json()).then(d => { setProps(Array.isArray(d) ? d : []); setLoading(false); });
   useEffect(() => { load(); }, []);
 
   async function handleAdd(e: React.FormEvent) {
@@ -33,6 +34,10 @@ export default function PropertiesPage() {
   } as const;
 
   const stateNote = STATE_NOTES[form.state];
+  const filtered = props.filter(p => {
+    const q = search.toLowerCase();
+    return !q || p.name.toLowerCase().includes(q) || p.city?.toLowerCase().includes(q) || p.state.toLowerCase().includes(q) || p.brand?.toLowerCase().includes(q);
+  });
 
   return (
     <div style={s.page}>
@@ -40,6 +45,12 @@ export default function PropertiesPage() {
         <h1 style={s.h1}>Properties <span style={{ fontWeight: 400, color: '#6b6760', fontSize: 16 }}>({props.length})</span></h1>
         <button style={s.btn} onClick={() => setShowForm(p => !p)}>+ Add property</button>
       </div>
+
+      {props.length > 0 && (
+        <div className="search-box">
+          <input placeholder="Search by name, city, state, or brand…" value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+      )}
 
       {showForm && (
         <form onSubmit={handleAdd} style={s.form}>
@@ -70,8 +81,9 @@ export default function PropertiesPage() {
       <div style={s.card}>
         {loading ? <div style={{ padding: 24, color: '#6b6760' }}>Loading…</div>
           : props.length === 0 ? <div style={{ padding: 32, textAlign: 'center', color: '#a8a39a' }}>No properties yet. Add your first hotel.</div>
-          : props.map((p, i) => (
-            <div key={p.id} style={{ ...s.row, ...(i === props.length - 1 ? { borderBottom: 'none' } : {}) }}>
+          : filtered.length === 0 ? <div style={{ padding: 32, textAlign: 'center', color: '#a8a39a' }}>No properties match &quot;{search}&quot;.</div>
+          : filtered.map((p, i) => (
+            <div key={p.id} className="card-hover" style={{ ...s.row, ...(i === filtered.length - 1 ? { borderBottom: 'none' } : {}) }}>
               <div>
                 <div style={{ fontWeight: 600, fontSize: 14, color: '#1c1b22' }}>{p.name}</div>
                 <div style={{ fontSize: 12, color: '#6b6760', marginTop: 2 }}>{p.city}, {p.state} {p.brand ? `· ${p.brand}` : ''} {p.is_marriott ? '· MGS login' : ''}</div>
