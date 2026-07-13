@@ -1,5 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { isBlank } from '@/lib/validate';
+import Toast, { ToastState } from '@/components/Toast';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 interface Position {
   id: string;
@@ -26,6 +29,11 @@ export default function PositionsPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState('');
   const [search, setSearch] = useState('');
+  const [formError, setFormError] = useState('');
+  const [shake, setShake] = useState(0);
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Position | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = async () => {
     const [posData, hireData] = await Promise.all([
@@ -42,31 +50,67 @@ export default function PositionsPage() {
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true);
-    await fetch('/api/positions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: form.title,
-        department: form.department,
-        headcount_target: form.headcount_target === '' ? null : Number(form.headcount_target),
-      }),
-    });
-    setSaving(false);
-    setShowForm(false);
-    setForm({ title: '', department: '', headcount_target: '' });
-    load();
+    if (isBlank(form.title)) { setFormError('Job title is required.'); setShake(s => s + 1); return; }
+
+    setSaving(true); setFormError('');
+    try {
+      const res = await fetch('/api/positions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: form.title,
+          department: form.department,
+          headcount_target: form.headcount_target === '' ? null : Number(form.headcount_target),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setFormError(data.error ?? 'Failed to add position.'); setShake(s => s + 1); return; }
+      setShowForm(false);
+      setForm({ title: '', department: '', headcount_target: '' });
+      setToast({ message: 'Position added successfully.', type: 'success' });
+      load();
+    } catch {
+      setFormError('Network error — please try again.'); setShake(s => s + 1);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function saveTarget(id: string) {
-    await fetch(`/api/positions/${id}`, {
+    const res = await fetch(`/api/positions/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ headcount_target: editTarget === '' ? null : Number(editTarget) }),
     });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setToast({ message: data.error ?? 'Failed to update target.', type: 'error' });
+      return;
+    }
     setEditId(null);
     setEditTarget('');
+    setToast({ message: 'Headcount target updated.', type: 'success' });
     load();
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/positions/${deleteTarget.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setToast({ message: data.error ?? 'Failed to delete position.', type: 'error' });
+      } else {
+        setToast({ message: `${deleteTarget.title} deleted.`, type: 'success' });
+        load();
+      }
+    } catch {
+      setToast({ message: 'Network error — please try again.', type: 'error' });
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
+    }
   }
 
   const s = {
@@ -82,6 +126,8 @@ export default function PositionsPage() {
     fullBadge: { background: '#e8f3ec', color: '#16794a', borderRadius: 999, padding: '2px 10px', fontSize: 11, fontWeight: 700 },
     targetBtn: { background: '#f4f2ee', color: '#6b6760', borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 600, border: '1px solid #e9e4da', cursor: 'pointer' },
     input: { padding: '6px 8px', border: '1px solid #ddd8cd', borderRadius: 6, fontSize: 13, width: 64 },
+    err:  { background: '#fae9e7', color: '#c0392b', border: '1px solid #f0c8c2', borderRadius: 6, padding: '10px 14px', marginBottom: 16, fontSize: 13 },
+    iconBtn: { background: '#f4f2ee', color: '#6b6760', border: 'none', borderRadius: 6, padding: '5px 9px', fontSize: 13, cursor: 'pointer' },
   } as const;
 
   const filtered = positions.filter(pos => {
@@ -105,10 +151,11 @@ export default function PositionsPage() {
       {showForm && (
         <form onSubmit={handleAdd} style={s.form}>
           <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 18 }}>Add position</div>
+          {formError && <div key={shake} style={s.err} className="animate-shake">{formError}</div>}
           <div style={s.grid}>
             <div>
               <label style={{ fontSize: 12, color: '#6b6760' }}>Job title</label>
-              <input required placeholder="Front Desk Agent" value={form.title}
+              <input placeholder="Front Desk Agent" value={form.title}
                 onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
                 style={{ ...s.input, width: '100%' }} />
             </div>
@@ -128,7 +175,7 @@ export default function PositionsPage() {
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button type="submit" style={s.btn} disabled={saving}>{saving ? 'Saving…' : 'Add position'}</button>
-            <button type="button" onClick={() => setShowForm(false)} style={{ background: '#f4f2ee', color: '#6b6760', padding: '9px 18px', borderRadius: 8, fontWeight: 600, border: 'none', cursor: 'pointer' }}>Cancel</button>
+            <button type="button" onClick={() => { setShowForm(false); setFormError(''); }} style={{ background: '#f4f2ee', color: '#6b6760', padding: '9px 18px', borderRadius: 8, fontWeight: 600, border: 'none', cursor: 'pointer' }}>Cancel</button>
           </div>
         </form>
       )}
@@ -155,7 +202,7 @@ export default function PositionsPage() {
                       </div>
                     )}
                   </div>
-                  <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     {editId === pos.id ? (
                       <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <input type="number" min={0} value={editTarget} placeholder="none"
@@ -169,12 +216,25 @@ export default function PositionsPage() {
                         {hasTarget ? `Target: ${pos.headcount_target}` : 'Set target'}
                       </button>
                     )}
+                    <button type="button" style={s.iconBtn} title="Delete" aria-label="Delete" onClick={() => setDeleteTarget(pos)}>🗑️</button>
                   </div>
                 </div>
               );
             })
         }
       </div>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Delete position?"
+        message={`This will permanently delete "${deleteTarget?.title}". This cannot be undone.`}
+        confirmLabel="Delete"
+        danger
+        loading={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

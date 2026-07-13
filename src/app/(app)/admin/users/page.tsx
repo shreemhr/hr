@@ -1,6 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { ROLE_LABELS } from '@/lib/constants';
+import { isBlank, isValidEmail, firstError } from '@/lib/validate';
+import Toast, { ToastState } from '@/components/Toast';
 
 interface UserRow   { id: string; name: string; email: string; role: string; property_ids: string[]; status: string; temp_password?: string; }
 interface Property  { id: string; name: string; }
@@ -14,6 +16,9 @@ export default function UsersPage() {
   const [form, setForm]           = useState({ name: '', email: '', role: 'hr' as string, propertyIds: [] as string[] });
   const [saving, setSaving]       = useState(false);
   const [search, setSearch]       = useState('');
+  const [formError, setFormError] = useState('');
+  const [shake, setShake]         = useState(0);
+  const [toast, setToast]         = useState<ToastState | null>(null);
 
   const load = async () => {
     const [ud, pd] = await Promise.all([fetch('/api/users').then(r => r.json()), fetch('/api/properties').then(r => r.json())]);
@@ -27,17 +32,47 @@ export default function UsersPage() {
     setForm(p => ({ ...p, propertyIds: p.propertyIds.includes(id) ? p.propertyIds.filter(x => x !== id) : [...p.propertyIds, id] }));
   }
 
+  function validate(): string | null {
+    return firstError([
+      [isBlank(form.name), 'Name is required.'],
+      [isBlank(form.email), 'Email is required.'],
+      [!isBlank(form.email) && !isValidEmail(form.email), 'Enter a valid email address.'],
+      [needsProps && form.propertyIds.length === 0, 'Assign at least one property for this role.'],
+    ]);
+  }
+
   async function handleAdd(e: React.FormEvent) {
-    e.preventDefault(); setSaving(true);
-    const res  = await fetch('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
-    const data = await res.json();
-    setSaving(false);
-    if (data.tempPassword) setNewPass(data.tempPassword);
-    setShowForm(false); setForm({ name: '', email: '', role: 'hr', propertyIds: [] }); load();
+    e.preventDefault();
+    const err = validate();
+    if (err) { setFormError(err); setShake(s => s + 1); return; }
+
+    setSaving(true); setFormError('');
+    try {
+      const res  = await fetch('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+      const data = await res.json();
+      if (!res.ok) {
+        setFormError(data.error ?? 'Failed to invite user.'); setShake(s => s + 1);
+        return;
+      }
+      if (data.tempPassword) setNewPass(data.tempPassword);
+      setShowForm(false); setForm({ name: '', email: '', role: 'hr', propertyIds: [] });
+      setToast({ message: 'User invited successfully.', type: 'success' });
+      load();
+    } catch {
+      setFormError('Network error — please try again.'); setShake(s => s + 1);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function toggleStatus(id: string, status: string) {
-    await fetch(`/api/users`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, status: status === 'active' ? 'inactive' : 'active' }) });
+    const res = await fetch(`/api/users`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, status: status === 'active' ? 'inactive' : 'active' }) });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setToast({ message: data.error ?? 'Failed to update user.', type: 'error' });
+      return;
+    }
+    setToast({ message: status === 'active' ? 'User deactivated.' : 'User activated.', type: 'success' });
     load();
   }
 
@@ -51,6 +86,7 @@ export default function UsersPage() {
     form:  { background: '#fff', border: '1px solid #e9e4da', borderRadius: 10, padding: 24, marginBottom: 20 },
     grid:  { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 },
     toast: { background: '#e8f3ec', border: '1px solid #bbf7d0', borderRadius: 8, padding: '14px 20px', marginBottom: 20, color: '#15803d' },
+    err:   { background: '#fae9e7', color: '#c0392b', border: '1px solid #f0c8c2', borderRadius: 6, padding: '10px 14px', marginBottom: 16, fontSize: 13 },
     chips: { display: 'flex', flexWrap: 'wrap' as const, gap: 8, marginTop: 8 },
     chip:  (a: boolean) => ({ padding: '5px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: `1px solid ${a ? '#4f46e5' : '#e9e4da'}`, background: a ? '#eef2ff' : '#faf8f4', color: a ? '#4f46e5' : '#6b6760' }),
   } as const;
@@ -84,9 +120,10 @@ export default function UsersPage() {
       {showForm && (
         <form onSubmit={handleAdd} style={s.form}>
           <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 18 }}>Invite user</div>
+          {formError && <div key={shake} style={s.err} className="animate-shake">{formError}</div>}
           <div style={s.grid}>
-            <div><label>Name</label><input required value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} /></div>
-            <div><label>Email</label><input type="email" required value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} /></div>
+            <div><label>Name</label><input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} /></div>
+            <div><label>Email</label><input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} /></div>
             <div>
               <label>Role</label>
               <select value={form.role} onChange={e => setForm(p => ({ ...p, role: e.target.value, propertyIds: [] }))}>
@@ -109,7 +146,7 @@ export default function UsersPage() {
           )}
           <div style={{ display: 'flex', gap: 10 }}>
             <button type="submit" style={s.btn} disabled={saving}>{saving ? 'Inviting…' : 'Send invite'}</button>
-            <button type="button" onClick={() => setShowForm(false)} style={{ background: '#f4f2ee', color: '#6b6760', padding: '9px 18px', borderRadius: 8, fontWeight: 600 }}>Cancel</button>
+            <button type="button" onClick={() => { setShowForm(false); setFormError(''); }} style={{ background: '#f4f2ee', color: '#6b6760', padding: '9px 18px', borderRadius: 8, fontWeight: 600 }}>Cancel</button>
           </div>
         </form>
       )}
@@ -134,6 +171,7 @@ export default function UsersPage() {
           ))
         }
       </div>
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

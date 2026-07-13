@@ -32,10 +32,13 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { name, address, city, state, zip, brand } = body;
+  const { name, address, city, state, zip, brand, is_marriott } = body;
 
-  if (!name || !state) {
+  if (!name?.trim() || !state?.trim()) {
     return NextResponse.json({ error: 'Name and state are required' }, { status: 400 });
+  }
+  if (!/^[A-Za-z]{2}$/.test(state.trim())) {
+    return NextResponse.json({ error: 'State must be a 2-letter code' }, { status: 400 });
   }
 
   const { data, error } = await supabase
@@ -45,9 +48,10 @@ export async function POST(req: NextRequest) {
       name: name.trim(),
       address: address?.trim() ?? null,
       city: city?.trim() ?? null,
-      state: state.toUpperCase(),
+      state: state.trim().toUpperCase(),
       zip: zip?.trim() ?? null,
       brand: brand?.trim() ?? null,
+      is_marriott: !!is_marriott,
     })
     .select()
     .single();

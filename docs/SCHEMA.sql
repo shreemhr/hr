@@ -50,10 +50,14 @@ create table if not exists properties (
   city        text,
   state       char(2) not null,  -- US state code
   zip         text,
+  is_marriott boolean not null default false,  -- Marriott/MGS login required for onboarding
   active      boolean not null default true,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
+
+-- Existing databases: add the column if the table was created before this field existed.
+alter table properties add column if not exists is_marriott boolean not null default false;
 
 create index if not exists properties_company_id_idx on properties(company_id);
 
