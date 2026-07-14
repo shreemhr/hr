@@ -14,8 +14,10 @@
 
 1. Create a new Supabase project at [supabase.com](https://supabase.com)
 2. Copy your **Project URL** and **service_role key** (Settings → API)
-3. Open the SQL editor and paste the entire contents of `docs/SCHEMA.sql`
-4. Click **Run** — all tables and indexes will be created
+3. Schema changes are managed as versioned migrations in `supabase/migrations/` and apply
+   **automatically on every deploy** (see §4) — you don't need to run any SQL by hand for a
+   new project. `docs/SCHEMA.sql` is kept only as a human-readable reference of the full
+   schema; it is not run directly anymore.
 
 ---
 
@@ -52,21 +54,44 @@ Click **Start Free Trial** to create your first account.
 
 ---
 
-## 4. Production Build
+## 4. Production Build & Automatic Migrations
 
-```bash
-npm run build
-npm start
+`npm run build` runs `scripts/migrate.mjs` before `next build`, which applies any pending
+files in `supabase/migrations/` directly to your database via the Supabase CLI
+(`supabase db push`). This means schema changes ship automatically with each deploy —
+no manual SQL Editor step required.
+
+This requires one additional environment variable:
+
+```env
+SUPABASE_DB_URL=postgresql://postgres:<db-password>@db.<project-ref>.supabase.co:5432/postgres
 ```
 
-Or deploy to **Vercel** (recommended):
+Find it in the Supabase dashboard → **Project Settings → Database → Connection string**
+(select **URI**, direct connection — not the pooled/transaction one). This is a highly
+sensitive credential (full database access) — add it only as an encrypted environment
+variable in your hosting provider's dashboard (e.g. Vercel → Settings → Environment
+Variables), never commit it, and avoid pasting it into chat/logs.
+
+If `SUPABASE_DB_URL` isn't set (e.g. local builds), the migration step is skipped with a
+warning rather than failing the build — set it in every environment where you want
+migrations to actually run (typically Production and Preview on Vercel).
+
+Deploy to **Vercel** (recommended):
 
 ```bash
 npm i -g vercel
 vercel --prod
 ```
 
-Add the environment variables in the Vercel dashboard under **Settings → Environment Variables**.
+Add all environment variables (including `SUPABASE_DB_URL`) in the Vercel dashboard under
+**Settings → Environment Variables** before deploying.
+
+To run migrations manually at any time (e.g. from your own machine):
+
+```bash
+SUPABASE_DB_URL=... npm run db:migrate
+```
 
 ---
 

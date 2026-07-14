@@ -6,9 +6,13 @@ naming), and **Phase 7 — Compensation Controls & Recognition**.
 
 Build status: `npm run build` passes clean with zero TypeScript errors.
 
+> **Note:** section 1 below is kept as a historical record of what this release needed.
+> Schema changes now apply automatically on deploy via `supabase/migrations/` — see
+> `docs/DEPLOYMENT.md` §4 — so this manual step is no longer required for new deploys.
+
 ---
 
-## 1. Database migration (run ONCE in Supabase SQL editor)
+## 1. Database migration (historical — now automatic, see note above)
 
 The full schema is in `docs/SCHEMA.sql`. For an existing database, run only the
 new migration statements:

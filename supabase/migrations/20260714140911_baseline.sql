@@ -1,11 +1,8 @@
 -- ============================================================
--- StayHR — Full Database Schema (REFERENCE ONLY)
+-- StayHR — Full Database Schema
 -- Phases 1–3: Multi-tenant foundation, Core HR, Onboarding & Documents
 -- ============================================================
--- This file is no longer applied directly. Schema changes are now tracked
--- as versioned migrations in supabase/migrations/, which apply automatically
--- on deploy (see docs/DEPLOYMENT.md §4). This file is kept only as a
--- human-readable snapshot of the full schema — do not run it by hand.
+-- Run this against your Supabase project (SQL editor or psql)
 -- All tables include company_id for multi-tenant isolation
 -- ============================================================
 
