@@ -26,6 +26,9 @@ export async function PATCH(
         ? null
         : Number(body.headcount_target);
   }
+  if (body.property_ids !== undefined) {
+    patch.property_ids = Array.isArray(body.property_ids) ? body.property_ids : [];
+  }
   // Pay band — corporate control (admin-only, already enforced above)
   if (body.pay_band_min !== undefined) {
     patch.pay_band_min = body.pay_band_min === '' || body.pay_band_min == null ? null : Number(body.pay_band_min);

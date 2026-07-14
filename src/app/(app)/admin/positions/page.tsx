@@ -11,6 +11,7 @@ interface Position {
   pay_type?: string;
   pay_rate?: number | null;
   headcount_target: number | null;
+  property_ids?: string[];
 }
 interface HiringRow {
   position_id: string;
@@ -18,11 +19,13 @@ interface HiringRow {
   open: number;
   target: number;
 }
+interface Property { id: string; name: string; }
 
-const EMPTY_FORM = { title: '', department: '', headcount_target: '' };
+const EMPTY_FORM = { title: '', department: '', headcount_target: '', propertyIds: [] as string[] };
 
 export default function PositionsPage() {
   const [positions, setPositions] = useState<Position[]>([]);
+  const [properties, setProperties] = useState<Property[]>([]);
   const [hiring, setHiring] = useState<Record<string, HiringRow>>({});
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -37,14 +40,16 @@ export default function PositionsPage() {
   const [deleting, setDeleting] = useState(false);
 
   const load = async () => {
-    const [posData, hireData] = await Promise.all([
+    const [posData, hireData, propData] = await Promise.all([
       fetch('/api/positions').then(r => r.json()),
       fetch('/api/reports/hiring').then(r => r.json()).catch(() => ({ rows: [] })),
+      fetch('/api/properties').then(r => r.json()).catch(() => []),
     ]);
     setPositions(Array.isArray(posData) ? posData : []);
     const map: Record<string, HiringRow> = {};
     for (const row of (hireData.rows ?? [])) map[row.position_id] = row;
     setHiring(map);
+    setProperties(Array.isArray(propData) ? propData : []);
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
@@ -58,7 +63,12 @@ export default function PositionsPage() {
 
   function openEditForm(pos: Position) {
     setEditingId(pos.id);
-    setForm({ title: pos.title, department: pos.department ?? '', headcount_target: pos.headcount_target?.toString() ?? '' });
+    setForm({
+      title: pos.title,
+      department: pos.department ?? '',
+      headcount_target: pos.headcount_target?.toString() ?? '',
+      propertyIds: pos.property_ids ?? [],
+    });
     setFormError('');
     setShowForm(true);
   }
@@ -68,6 +78,10 @@ export default function PositionsPage() {
     setEditingId(null);
     setForm(EMPTY_FORM);
     setFormError('');
+  }
+
+  function toggleProperty(id: string) {
+    setForm(p => ({ ...p, propertyIds: p.propertyIds.includes(id) ? p.propertyIds.filter(x => x !== id) : [...p.propertyIds, id] }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -83,6 +97,7 @@ export default function PositionsPage() {
           title: form.title,
           department: form.department,
           headcount_target: form.headcount_target === '' ? null : Number(form.headcount_target),
+          property_ids: form.propertyIds,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -129,15 +144,21 @@ export default function PositionsPage() {
     openBadge: { background: '#fae9e7', color: '#c0392b', borderRadius: 999, padding: '2px 10px', fontSize: 11, fontWeight: 700 },
     fullBadge: { background: '#e8f3ec', color: '#16794a', borderRadius: 999, padding: '2px 10px', fontSize: 11, fontWeight: 700 },
     targetBadge: { background: '#f4f2ee', color: '#6b6760', borderRadius: 999, padding: '2px 10px', fontSize: 11, fontWeight: 600 },
+    scopeBadge: { background: '#eef2ff', color: '#4f46e5', borderRadius: 999, padding: '2px 10px', fontSize: 11, fontWeight: 600 },
     input: { padding: '6px 8px', border: '1px solid #ddd8cd', borderRadius: 6, fontSize: 13, width: 64 },
     err:  { background: '#fae9e7', color: '#c0392b', border: '1px solid #f0c8c2', borderRadius: 6, padding: '10px 14px', marginBottom: 16, fontSize: 13 },
     iconBtn: { background: '#f4f2ee', color: '#6b6760', border: 'none', borderRadius: 6, padding: '5px 9px', fontSize: 13, cursor: 'pointer' },
+    chips: { display: 'flex', flexWrap: 'wrap' as const, gap: 8, marginTop: 8 },
+    chip:  (a: boolean) => ({ padding: '5px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: `1px solid ${a ? '#4f46e5' : '#e9e4da'}`, background: a ? '#eef2ff' : '#faf8f4', color: a ? '#4f46e5' : '#6b6760' }),
   } as const;
 
   const filtered = positions.filter(pos => {
     const q = search.toLowerCase();
     return !q || pos.title.toLowerCase().includes(q) || pos.department?.toLowerCase().includes(q);
   });
+
+  const propertyNames = (ids: string[] | undefined) =>
+    (ids ?? []).map(id => properties.find(p => p.id === id)?.name).filter(Boolean).join(', ');
 
   return (
     <div style={s.page}>
@@ -177,6 +198,23 @@ export default function PositionsPage() {
               <div style={{ fontSize: 10, color: '#a8a39a', marginTop: 3 }}>Desired # of active staff in this role</div>
             </div>
           </div>
+          <div style={{ marginBottom: 18 }}>
+            <label style={{ fontSize: 12, color: '#6b6760' }}>Property</label>
+            {properties.length === 0 ? (
+              <div style={{ fontSize: 12, color: '#a8a39a', marginTop: 4 }}>No properties yet — add one in Admin → Properties first.</div>
+            ) : (
+              <>
+                <div style={s.chips}>
+                  {properties.map(pr => (
+                    <span key={pr.id} style={s.chip(form.propertyIds.includes(pr.id))} onClick={() => toggleProperty(pr.id)}>{pr.name}</span>
+                  ))}
+                </div>
+                <div style={{ fontSize: 10, color: '#a8a39a', marginTop: 6 }}>
+                  {form.propertyIds.length === 0 ? 'None selected — this role will apply to all properties.' : 'This role only appears at the selected properties.'}
+                </div>
+              </>
+            )}
+          </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button type="submit" style={s.btn} disabled={saving}>{saving ? 'Saving…' : editingId ? 'Save changes' : 'Add position'}</button>
             <button type="button" onClick={closeForm} style={{ background: '#f4f2ee', color: '#6b6760', padding: '9px 18px', borderRadius: 8, fontWeight: 600, border: 'none', cursor: 'pointer' }}>Cancel</button>
@@ -191,6 +229,7 @@ export default function PositionsPage() {
           : filtered.map((pos, i) => {
               const h = hiring[pos.id];
               const hasTarget = pos.headcount_target != null;
+              const scoped = (pos.property_ids ?? []).length > 0;
               return (
                 <div key={pos.id} className="card-hover" style={{ ...s.row, ...(i === filtered.length - 1 ? { borderBottom: 'none' } : {}) }}>
                   <div>
@@ -205,9 +244,15 @@ export default function PositionsPage() {
                         {h.filled} of {h.target} filled
                       </div>
                     )}
+                    {scoped && (
+                      <div style={{ fontSize: 11, color: '#a8a39a', marginTop: 4 }}>
+                        📍 {propertyNames(pos.property_ids)}
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     {hasTarget && <span style={s.targetBadge}>Target: {pos.headcount_target}</span>}
+                    <span style={s.scopeBadge}>{scoped ? `${pos.property_ids!.length} propert${pos.property_ids!.length === 1 ? 'y' : 'ies'}` : 'All properties'}</span>
                     <button type="button" style={s.iconBtn} title="Edit" aria-label="Edit" onClick={() => openEditForm(pos)}>✏️</button>
                     <button type="button" style={s.iconBtn} title="Delete" aria-label="Delete" onClick={() => setDeleteTarget(pos)}>🗑️</button>
                   </div>

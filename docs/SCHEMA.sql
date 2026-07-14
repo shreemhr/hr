@@ -82,10 +82,12 @@ create table if not exists positions (
   pay_band_min numeric(10,2) default null,   -- corporate-approved minimum (null = no band set)
   pay_band_max numeric(10,2) default null,   -- corporate-approved maximum
   pay_band_mode text not null default 'hard' check (pay_band_mode in ('hard','soft')),  -- hard = block+exception, soft = flag+notify
+  property_ids uuid[] not null default '{}',  -- properties this role applies to (empty = all)
   active      boolean not null default true,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
+create index if not exists positions_property_ids_idx on positions using gin (property_ids);
 
 create index if not exists positions_company_id_idx on positions(company_id);
 
