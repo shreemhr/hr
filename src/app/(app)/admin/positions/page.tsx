@@ -19,15 +19,16 @@ interface HiringRow {
   target: number;
 }
 
+const EMPTY_FORM = { title: '', department: '', headcount_target: '' };
+
 export default function PositionsPage() {
   const [positions, setPositions] = useState<Position[]>([]);
   const [hiring, setHiring] = useState<Record<string, HiringRow>>({});
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ title: '', department: '', headcount_target: '' });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
-  const [editTarget, setEditTarget] = useState('');
   const [search, setSearch] = useState('');
   const [formError, setFormError] = useState('');
   const [shake, setShake] = useState(0);
@@ -48,14 +49,35 @@ export default function PositionsPage() {
   };
   useEffect(() => { load(); }, []);
 
-  async function handleAdd(e: React.FormEvent) {
+  function openAddForm() {
+    setEditingId(null);
+    setForm(EMPTY_FORM);
+    setFormError('');
+    setShowForm(true);
+  }
+
+  function openEditForm(pos: Position) {
+    setEditingId(pos.id);
+    setForm({ title: pos.title, department: pos.department ?? '', headcount_target: pos.headcount_target?.toString() ?? '' });
+    setFormError('');
+    setShowForm(true);
+  }
+
+  function closeForm() {
+    setShowForm(false);
+    setEditingId(null);
+    setForm(EMPTY_FORM);
+    setFormError('');
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (isBlank(form.title)) { setFormError('Job title is required.'); setShake(s => s + 1); return; }
 
     setSaving(true); setFormError('');
     try {
-      const res = await fetch('/api/positions', {
-        method: 'POST',
+      const res = await fetch(editingId ? `/api/positions/${editingId}` : '/api/positions', {
+        method: editingId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: form.title,
@@ -64,33 +86,15 @@ export default function PositionsPage() {
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) { setFormError(data.error ?? 'Failed to add position.'); setShake(s => s + 1); return; }
-      setShowForm(false);
-      setForm({ title: '', department: '', headcount_target: '' });
-      setToast({ message: 'Position added successfully.', type: 'success' });
+      if (!res.ok) { setFormError(data.error ?? 'Failed to save position.'); setShake(s => s + 1); return; }
+      closeForm();
+      setToast({ message: editingId ? 'Position updated successfully.' : 'Position added successfully.', type: 'success' });
       load();
     } catch {
       setFormError('Network error — please try again.'); setShake(s => s + 1);
     } finally {
       setSaving(false);
     }
-  }
-
-  async function saveTarget(id: string) {
-    const res = await fetch(`/api/positions/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ headcount_target: editTarget === '' ? null : Number(editTarget) }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setToast({ message: data.error ?? 'Failed to update target.', type: 'error' });
-      return;
-    }
-    setEditId(null);
-    setEditTarget('');
-    setToast({ message: 'Headcount target updated.', type: 'success' });
-    load();
   }
 
   async function confirmDelete() {
@@ -124,7 +128,7 @@ export default function PositionsPage() {
     grid: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 16 },
     openBadge: { background: '#fae9e7', color: '#c0392b', borderRadius: 999, padding: '2px 10px', fontSize: 11, fontWeight: 700 },
     fullBadge: { background: '#e8f3ec', color: '#16794a', borderRadius: 999, padding: '2px 10px', fontSize: 11, fontWeight: 700 },
-    targetBtn: { background: '#f4f2ee', color: '#6b6760', borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 600, border: '1px solid #e9e4da', cursor: 'pointer' },
+    targetBadge: { background: '#f4f2ee', color: '#6b6760', borderRadius: 999, padding: '2px 10px', fontSize: 11, fontWeight: 600 },
     input: { padding: '6px 8px', border: '1px solid #ddd8cd', borderRadius: 6, fontSize: 13, width: 64 },
     err:  { background: '#fae9e7', color: '#c0392b', border: '1px solid #f0c8c2', borderRadius: 6, padding: '10px 14px', marginBottom: 16, fontSize: 13 },
     iconBtn: { background: '#f4f2ee', color: '#6b6760', border: 'none', borderRadius: 6, padding: '5px 9px', fontSize: 13, cursor: 'pointer' },
@@ -139,7 +143,7 @@ export default function PositionsPage() {
     <div style={s.page}>
       <div style={s.head}>
         <h1 style={s.h1}>Positions <span style={{ fontWeight: 400, color: '#6b6760', fontSize: 16 }}>({positions.length})</span></h1>
-        <button style={s.btn} onClick={() => setShowForm(p => !p)}>+ Add position</button>
+        <button style={s.btn} onClick={() => (showForm ? closeForm() : openAddForm())}>{showForm ? 'Close' : '+ Add position'}</button>
       </div>
 
       {positions.length > 0 && (
@@ -149,8 +153,8 @@ export default function PositionsPage() {
       )}
 
       {showForm && (
-        <form onSubmit={handleAdd} style={s.form}>
-          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 18 }}>Add position</div>
+        <form onSubmit={handleSubmit} style={s.form}>
+          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 18 }}>{editingId ? 'Edit position' : 'Add position'}</div>
           {formError && <div key={shake} style={s.err} className="animate-shake">{formError}</div>}
           <div style={s.grid}>
             <div>
@@ -174,8 +178,8 @@ export default function PositionsPage() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button type="submit" style={s.btn} disabled={saving}>{saving ? 'Saving…' : 'Add position'}</button>
-            <button type="button" onClick={() => { setShowForm(false); setFormError(''); }} style={{ background: '#f4f2ee', color: '#6b6760', padding: '9px 18px', borderRadius: 8, fontWeight: 600, border: 'none', cursor: 'pointer' }}>Cancel</button>
+            <button type="submit" style={s.btn} disabled={saving}>{saving ? 'Saving…' : editingId ? 'Save changes' : 'Add position'}</button>
+            <button type="button" onClick={closeForm} style={{ background: '#f4f2ee', color: '#6b6760', padding: '9px 18px', borderRadius: 8, fontWeight: 600, border: 'none', cursor: 'pointer' }}>Cancel</button>
           </div>
         </form>
       )}
@@ -203,19 +207,8 @@ export default function PositionsPage() {
                     )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {editId === pos.id ? (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <input type="number" min={0} value={editTarget} placeholder="none"
-                          onChange={e => setEditTarget(e.target.value)} style={s.input} />
-                        <button onClick={() => saveTarget(pos.id)} style={s.btn}>Save</button>
-                        <button onClick={() => setEditId(null)} style={s.targetBtn}>Cancel</button>
-                      </span>
-                    ) : (
-                      <button style={s.targetBtn}
-                        onClick={() => { setEditId(pos.id); setEditTarget(pos.headcount_target?.toString() ?? ''); }}>
-                        {hasTarget ? `Target: ${pos.headcount_target}` : 'Set target'}
-                      </button>
-                    )}
+                    {hasTarget && <span style={s.targetBadge}>Target: {pos.headcount_target}</span>}
+                    <button type="button" style={s.iconBtn} title="Edit" aria-label="Edit" onClick={() => openEditForm(pos)}>✏️</button>
                     <button type="button" style={s.iconBtn} title="Delete" aria-label="Delete" onClick={() => setDeleteTarget(pos)}>🗑️</button>
                   </div>
                 </div>
